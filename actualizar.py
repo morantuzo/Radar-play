@@ -257,7 +257,7 @@ def descargar(url):
 
 
 # ===================== Actualizar por internet (GitHub) =====================
-online = {"repo": "morantuzo/radar-play", "nueva": None, "hay": False, "msg": "", "ts": 0}
+online = {"repo": "morantuzo/Radar-play", "nueva": None, "hay": False, "msg": "", "ts": 0}
 
 
 def _mas_nueva(a, b):

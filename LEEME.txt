@@ -117,7 +117,7 @@ TIRA LED USB
 
 ACTUALIZAR SIN PENDRIVE
 - Por internet: Sistema > Actualizar > Buscar (y avisa solo). Necesita el
-  repositorio de GitHub morantuzo/radar-play (ACTUALIZAR_GITHUB en el conf).
+  repositorio de GitHub morantuzo/Radar-play (ACTUALIZAR_GITHUB en el conf).
 - Desde el iPhone (misma WiFi): guarda Radar-Play.zip en Archivos, abre el
   mando y pulsa "Actualizar Radar Play" (o Sistema > Actualizar > Desde el
   iPhone y escanea el QR). Elige el zip y espera: se reinicia solo.
