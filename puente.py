@@ -537,10 +537,22 @@ if __name__ == "__main__":
         print("No he encontrado ningún puerto libre. Cierra otras ventanas de Radar Play y vuelve a probar.")
         sys.exit(1)
     if srv.server_address[0] == "0.0.0.0":
-        ip = ip_local()
-        if ip:
-            estado_mando["url"] = "http://%s:%d/mando?k=%s" % (ip, puerto, CODIGO)
-            print("Mando del iPhone (misma WiFi):", estado_mando["url"])
+        # Al arrancar el coche la WiFi suele tardar: se mira cada 10 s y se actualiza si cambia la IP
+        def vigila_ip():
+            antes = None
+            while True:
+                ip = ip_local()
+                if ip and ip != antes and not ip.startswith("127."):
+                    estado_mando["url"] = "http://%s:%d/mando?k=%s" % (ip, puerto, CODIGO)
+                    LOG.info("Mando del iPhone (misma WiFi): %s", estado_mando["url"])
+                elif not ip and antes:
+                    estado_mando["url"] = None
+                    LOG.aviso("Sin WiFi: el mando del iPhone no está disponible")
+                antes = ip
+                time.sleep(10)
+        threading.Thread(target=vigila_ip, daemon=True, name="ip-mando").start()
+    else:
+        LOG.aviso("El puente solo escucha en este equipo (MANDO_IPHONE=0 o el puerto está ocupado)")
     try:
         with open(os.path.join(SIS.DATOS, "puerto"), "w") as f:
             f.write(str(puerto))

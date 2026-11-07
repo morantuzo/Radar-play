@@ -300,7 +300,7 @@ document.addEventListener('click',e=>{
 const BR={ok:false,mando:null,since:0};
 function mandoText(){
   if(!BR.ok) return 'Arranca Radar Play con «Iniciar Radar Play.bat» para poder usarlo.';
-  if(!BR.mando) return 'El puente está en modo solo-ordenador. Revisa MANDO_IPHONE en puente.py.';
+  if(!BR.mando) return 'Esperando a la WiFi… Si no sale en un minuto, comprueba que la Raspberry está conectada a la WiFi (y MANDO_IPHONE=1 en radar-play.conf).';
   return `Con el iPhone en la misma WiFi, escanea el código con la cámara o abre <b>${esc(BR.mando.url)}</b>. Desde ahí envías destinos (también enlaces de Google Maps), música, el modo DNA u órdenes para Siri.`;
 }
 function drawQR(){ const q=$('qr'); if(!q) return; q.innerHTML=''; if(!BR.mando) return;
