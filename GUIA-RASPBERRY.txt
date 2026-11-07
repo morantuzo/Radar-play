@@ -1,0 +1,126 @@
+RADAR PLAY EN LA RASPBERRY PI · PASO A PASO
+===========================================
+
+LO QUE NECESITAS
+- Raspberry Pi 4 o 5 (4 GB o más) y una tarjeta microSD de 32 GB o más.
+- Pantalla táctil de 1280x720 (la ideal), 1280x800 o 1024x600. Menos de 1024x600 no cabe.
+  Recomendada: Raspberry Pi Touch Display 2 de 7" (720x1280, se usa girada en horizontal:
+  pon PANTALLA_GIRO=90 en sistema/radar-play.conf ANTES de instalar).
+  Si usas la de 10" (1920x1200), pon también PANTALLA_ESCALA=1.5.
+- Teclado y ratón solo para la instalación.
+- Internet (WiFi de casa).
+
+1. PREPARAR LA TARJETA (en el ordenador)
+   - Descarga "Raspberry Pi Imager" e instala "Raspberry Pi OS (64-bit)" CON escritorio.
+   - En la rueda de ajustes pon: nombre de usuario (por ejemplo pi), contraseña, tu WiFi
+     y zona horaria Europe/Madrid.
+
+2. COPIAR RADAR PLAY AL PENDRIVE (en el PC)
+   - Descomprime el zip y copia al pendrive la carpeta "radar-play" (la de dentro).
+   - Si usas la Touch Display 2: en el pendrive abre radar-play/sistema/radar-play.conf
+     con el Bloc de notas y pon PANTALLA_GIRO=90. Guarda.
+
+3. INSTALAR (una sola vez, en la Raspberry)
+   - Mete el pendrive. En el gestor de archivos abre la carpeta radar-play del pendrive
+     y pulsa F4 (o menú Herramientas > Abrir carpeta actual en terminal).
+   - Escribe:
+         sudo bash INSTALAR.sh
+     y la contraseña de tu usuario (no se ve al escribirla, es normal).
+   - Se copia sola a tu carpeta personal (/home/pi/radar-play), instala lo necesario
+     y al final dice "Listo, sin problemas" o la lista de lo que ha fallado.
+   - Si se corta o falla algo, vuelve a ejecutarlo: continúa sin problema.
+   - Todo lo que hace queda en /home/pi/radar-play-instalacion.log
+   - Cuando pregunte si reiniciar, di que sí.
+
+4. A PARTIR DE AHÍ
+   - Al encender: logo de Radar Play, comprobaciones y directamente el panel.
+     Sin escritorio, sin barra, sin puntero.
+   - Si el navegador o el puente fallan, vuelven a arrancar solos. Si la Raspberry se
+     cuelga, se reinicia sola.
+   - Abre la app "Sistema" para: volumen, brillo, WiFi, actualizar, apagar, reiniciar
+     y "Salir al escritorio" (mantenimiento; al reiniciar vuelve a Radar Play).
+   - Tus ajustes (clave de Google, contactos, destinos...) se guardan también en la
+     tarjeta, en radar-play/datos, por si se borra el navegador.
+
+5. PRIMERA CONFIGURACIÓN EN PANTALLA
+   - Pega la clave de Google Maps (sale sola la primera vez). El teclado aparece en pantalla.
+     En Google Cloud deben estar activadas: Maps JavaScript API, Routes API y Places API (New).
+   - Vista 3D al navegar (como en el móvil): crea un ID de mapa vectorial en Google Cloud
+     (Google Maps Platform > Gestión de mapas > Crear ID de mapa > JavaScript > Vectorial,
+     marcando Inclinación y Rotación) y pégalo en Mapas > Capas > Vista 3D al navegar.
+   - Ajustes > Casa y Trabajo.
+   - Sistema > WiFi. En el coche, comparte internet desde el iPhone
+     (Ajustes del iPhone > Punto de acceso personal) y conéctate a él una vez.
+   - Mi coche: pon los km del cuadro y la última vez que se hizo cada mantenimiento.
+     Los km se suman con el GPS USB; sin GPS solo cuentan si la pantalla tiene ubicación.
+     Los datos están en radar-play/datos: cópialos antes de cambiar la tarjeta SD.
+
+AÑADIR EL HARDWARE POCO A POCO
+   Sistema > Hardware te dice qué está conectado. Nada es obligatorio:
+   - GPS USB (u-blox, tipo VK-162): enchufar y listo. Da la posición y suma los km.
+   - Lector OBD-II ELM327 (USB mejor que Bluetooth): enchufar. Datos reales del motor.
+   - Módem 4G USB: internet propio en el coche (si no, el punto de acceso del iPhone).
+   - Cámara trasera USB: Cámaras > Ajustes para elegirla.
+   - Cable de la llave y de la marcha atrás: con un optoacoplador (12 V del coche a 3,3 V)
+     a un pin GPIO. Después pon el número en PIN_CONTACTO o PIN_MARCHA_ATRAS en
+     sistema/radar-play.conf y reinicia. No conectes nunca 12 V directo a la Raspberry.
+   - iPhone por Bluetooth: Sistema > iPhone por Bluetooth > Emparejar un iPhone. En el
+     iPhone: Ajustes > Bluetooth > Radar Play, y permite "Sincronizar contactos".
+     Para hablar en las llamadas hace falta un micrófono USB.
+   - Sensores de ruedas: tapones TPMS Bluetooth (4 tapones numerados). Se detectan solos.
+   - Garaje: módulo de relé de 1 canal soldado en paralelo con el botón del mando del
+     garaje. Señal del relé a un GPIO y PIN_GARAJE=número.
+   - Acelerómetro MPU-6050 (I2C: SDA pin 3, SCL pin 5, 3,3 V pin 1, GND pin 6): ACELEROMETRO=1.
+   - Dashcam: otra cámara USB delantera. DASHCAM_CAMARA=/dev/video0 (mira cuál es con
+     "v4l2-ctl --list-devices"). Graba en datos/dashcam y borra lo viejo al llenarse.
+   - Tira LED WS2812: datos al GPIO10 (pin 19), 5 V aparte y masas unidas. LEDS=número.
+   - Alimentación en el coche: convertidor de 12 V a 5 V de 5 A (Pi 5) o 3 A (Pi 4).
+
+ACTUALIZAR RADAR PLAY
+   - Copia el nuevo Radar-Play.zip (sin descomprimir) a un pendrive y enchúfalo.
+   - Sistema > Actualizar Radar Play > Instalar. Se guarda una copia de la versión anterior
+     en /home/pi/radar-play-copia.
+
+AJUSTES AVANZADOS: archivo sistema/radar-play.conf
+   - PIN_CONTACTO: cable de la llave para apagar solo al quitar el contacto (déjalo en -1
+     hasta tenerlo montado).
+   - OBD_PUERTO, GPS_PUERTO: lector OBD-II y GPS USB.
+   - CARPLAY_CMD: programa de CarPlay cuando tengas el adaptador.
+   Después de cambiarlo, reinicia.
+
+GPS
+   - Con un GPS USB (tipo u-blox VK-162) el mapa sigue al coche de verdad y la navegación
+     recalcula si te sales. Sin GPS puedes seguir usando "Simular viaje".
+
+CÁMARAS (MARCHA ATRÁS Y 360)
+   - Conecta las cámaras USB y abre Cámaras > Ajustes > Buscar cámaras. Asigna cuál es la
+     trasera, delantera, izquierda y derecha (o la entrada del kit 360 si usas uno comercial).
+   - Para que la trasera se abra sola: cable de la luz de marcha atrás a un GPIO por un
+     optoacoplador y pon su número en PIN_MARCHA_ATRAS (sistema/radar-play.conf).
+   - Calibrar (una vez, con el coche parado en llano): Cámaras > Ajustes > Calibrar.
+     Pon 4 folios en el suelo en las posiciones del dibujo y tócalos en la imagen.
+     Con la trasera calibrada, las líneas marcan el ancho real del coche a 0,5/1/2/3 m.
+   - Para probar en casa: tecla R, el botón «Probar marcha atrás» o dile a Siri «marcha atrás».
+
+QUITARLO TODO
+         cd ~/radar-play
+         sudo bash sistema/desinstalar.sh
+
+SI ALGO FALLA: EL REGISTRO (LOG)
+   Radar Play apunta todo lo que pasa en la carpeta radar-play/datos/logs:
+   - radar-play.log: arranque y configuración, lo que pulsas, órdenes del mando y de voz,
+     cambios de estado (OBD, GPS, llave, iPhone, ruedas, garaje...) y todos los errores.
+   - chromium.log: lo que dice el navegador. kiosk.log: cada vez que arranca o se cierra.
+   Para verlo o sacarlo:
+   - En la pantalla: Sistema > Registro de fallos > Ver / Solo errores / Copiar a pendrive.
+   - En el Terminal (Sistema > Salir al escritorio):
+         tail -f ~/radar-play/datos/logs/radar-play.log
+         grep -E "ERROR|WARNING" ~/radar-play/datos/logs/radar-play.log
+   Para que apunte aún más (cada petición), pon LOG_NIVEL=debug en sistema/radar-play.conf.
+   Diagnóstico completo (programas, servicio, errores, instalación) en un archivo:
+         bash ~/radar-play/sistema/diagnostico.sh
+     Lo guarda en datos/logs/diagnostico.txt y en el pendrive si hay uno conectado.
+   Si la pantalla dice "Radar Play no ha podido arrancar", ahí mismo sale el motivo.
+   Mándame el archivo (o una foto de "Solo errores") y te digo qué pasa.
+   No guarda contraseñas, claves, números de teléfono ni lo que escribes.
+

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Radar Play desde el móvil</title>
+<style>
+:root{--bg:#06080b;--panel:#13171d;--panel-2:#1c2229;--line:#272e37;--fg:#f1f4f7;--muted:#8a94a1;--accent:#ff2b34;--ok:#34c46a;--stop:#ff4d4f;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 -apple-system,system-ui,"Segoe UI",sans-serif;max-width:560px;margin:0 auto;
+  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+h1{font-size:28px;margin:0 0 2px;font-weight:800}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px;display:flex;flex-direction:column;gap:12px}
+h2{font-size:13px;margin:0;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+ol{margin:0;padding-left:20px;color:var(--muted);font-size:14.5px}ol b{color:var(--fg)}
+input[type=url],input[type=text]{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;color:var(--fg);font:inherit}
+button,label.btn{font:inherit;font-weight:700;border:0;border-radius:12px;padding:15px 10px;background:var(--panel-2);color:var(--fg);text-align:center;display:block;width:100%;cursor:pointer}
+.on{background:var(--accent)!important;color:#fff!important}
+input[type=file]{display:none}
+.est{font-size:15px}.est b{display:block;font-size:18px;margin-bottom:2px}
+.bar{height:8px;border-radius:6px;background:var(--panel-2);overflow:hidden}.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.ok{color:var(--ok)}.mal{color:var(--stop)}
+.muted{color:var(--muted);font-size:14px}
+.api{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--line)}.api i{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:13px;background:var(--panel-2)}
+.api i.s{background:#1e8e3e}.api i.n{background:#d93025}.api b{display:block}
+</style>
+</head>
+<body>
+<h1>Radar Play</h1>
+<p class="sub" id="ver">Conectando con el coche…</p>
+
+<section id="secOnline" hidden>
+  <h2>Actualizar por internet</h2>
+  <div class="est" id="onl"></div>
+  <button class="on" id="bOnline" hidden>Actualizar ahora</button>
+  <button id="bBuscar">Buscar versión nueva</button>
+</section>
+
+<section>
+  <h2>Google Maps</h2>
+  <p class="muted" style="margin:0">Copia y pega desde Google Cloud (console.cloud.google.com). La pantalla del coche los coge sola.</p>
+  <input type="text" id="gK" placeholder="Clave de API (empieza por AIza…)" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <input type="text" id="gM" placeholder="ID de mapa (opcional, para la vista 3D)" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <input type="text" id="gY" placeholder="Clave de YouTube (opcional; si no, usa la de Maps)" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <button class="on" id="bG">Enviar al coche y comprobar</button>
+  <button id="bApis">Solo comprobar las APIs</button>
+  <div id="apis"></div>
+</section>
+
+<section>
+  <h2>Subir la versión nueva</h2>
+  <ol>
+    <li>Descarga <b>Radar-Play.zip</b> en este móvil u ordenador (en el iPhone: <b>Guardar en Archivos</b>).</li>
+    <li>Pulsa el botón y elige el zip.</li>
+    <li>Espera. Radar Play se reinicia solo con la versión nueva. Tus datos y ajustes se quedan.</li>
+  </ol>
+  <label class="btn on" for="f">Elegir Radar-Play.zip</label>
+  <input type="file" id="f" accept=".zip,application/zip,application/x-zip-compressed">
+  <div class="bar" id="bar" hidden><i id="barI"></i></div>
+</section>
+
+<section id="secEst" hidden>
+  <h2>Estado</h2>
+  <div class="est" id="est"></div>
+</section>
+
+<section>
+  <h2>Otras formas</h2>
+  <input type="url" id="url" placeholder="Enlace directo a un zip (opcional)">
+  <button id="bUrl">Descargar e instalar desde el enlace</button>
+  <button id="bAtras" hidden>Volver a la versión anterior</button>
+  <p class="muted">También puedes descargar el zip en la propia Raspberry: Radar Play › Sistema › Actualizar lo encuentra en Descargas o en un pendrive.</p>
+</section>
+
+<script>
+const K=new URLSearchParams(location.search).get('k')||'';
+const $=id=>document.getElementById(id);
+let antes=null, siguiendo=false, caido=false;
+function pinta(d){
+  $('ver').textContent='Versión instalada: '+d.version+(d.anterior?' · anterior guardada: '+d.anterior:'');
+  $('bAtras').hidden=!d.anterior; if(d.anterior) $('bAtras').textContent='Volver a la versión anterior ('+d.anterior+')';
+  if(!d.fase){ if(!siguiendo) $('secEst').hidden=true; return; }
+  $('secEst').hidden=false;
+  const cls=d.ok===false?'mal':d.ok?'ok':'';
+  const tit={subir:'Recibiendo…',comprobar:'Comprobando…',copia:'Guardando copia…',instalar:'Instalando…',programas:'Instalando programas…',reinicio:'Reiniciando…',hecho:'Hecho',error:'No se pudo actualizar'}[d.fase]||'';
+  $('est').innerHTML=`<b class="${cls}">${tit}</b>${esc(d.msg||'')}${d.log?'<div class="muted">'+esc(d.log)+'</div>':''}`;
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function estado(){
+  try{
+    const d=await (await fetch('/api/actualizar/estado',{cache:'no-store'})).json();
+    if(antes===null) antes=d.version;
+    if(siguiendo&&caido&&(d.version!==antes||d.fase==='')){ siguiendo=false; $('secEst').hidden=false;
+      $('est').innerHTML='<b class="ok">✓ Actualizado</b>Radar Play ya funciona con la versión '+esc(d.version)+'.'; $('ver').textContent='Versión instalada: '+d.version; antes=d.version; return; }
+    caido=false; pinta(d);
+  }catch(e){ if(siguiendo){ caido=true; $('secEst').hidden=false; $('est').innerHTML='<b>Reiniciando…</b>Radar Play está arrancando con la versión nueva. Espera unos segundos.'; }
+    else $('ver').textContent='No conecto con el coche. ¿Estás en la misma WiFi?'; }
+}
+setInterval(estado,1500); estado();
+
+$('f').onchange=()=>{
+  const f=$('f').files[0]; if(!f) return;
+  if(!/\.zip$/i.test(f.name)){ alert('Elige el archivo .zip de Radar Play'); return; }
+  const x=new XMLHttpRequest(); $('bar').hidden=false; $('secEst').hidden=false; $('est').innerHTML='<b>Subiendo…</b>'+esc(f.name)+' ('+(f.size/1048576).toFixed(1)+' MB)';
+  x.upload.onprogress=e=>{ if(e.lengthComputable) $('barI').style.width=(e.loaded/e.total*100)+'%'; };
+  x.onload=()=>{ let j={}; try{ j=JSON.parse(x.responseText); }catch(e){}
+    if(!j.ok){ $('est').innerHTML='<b class="mal">No se pudo</b>'+esc(j.error||('Error '+x.status)); return; }
+    siguiendo=true; $('est').innerHTML='<b>Instalando…</b>'+esc(j.msg||''); };
+  x.onerror=()=>{ $('est').innerHTML='<b class="mal">La subida falló</b>Comprueba que sigues en la misma WiFi y prueba otra vez.'; };
+  x.open('POST','/api/actualizar/subir?k='+encodeURIComponent(K)); x.setRequestHeader('Content-Type','application/zip'); x.send(f);
+  $('f').value='';
+};
+async function remoto(o){
+  try{ const j=await (await fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)})).json();
+    if(!j.ok){ $('secEst').hidden=false; $('est').innerHTML='<b class="mal">No se pudo</b>'+esc(j.error||''); return; } siguiendo=true; }
+  catch(e){ alert('No conecto con el coche'); }
+}
+function pintaApis(l){ $('apis').innerHTML=(l||[]).map(a=>`<div class="api"><i class="${a.ok===true?'s':a.ok===false?'n':''}">${a.ok===true?'✓':a.ok===false?'✕':'?'}</i><div><b>${esc(a.api)}</b><span class="muted">${esc(a.para)} · ${esc(a.msg)}</span></div></div>`).join(''); }
+$('bG').onclick=async()=>{ const o={accion:'google',clave:$('gK').value,mapid:$('gM').value,yt:$('gY').value};
+  if(!o.clave.trim()&&!o.mapid.trim()&&!o.yt.trim()) return $('gK').focus();
+  $('apis').innerHTML='<p class="muted">Enviando y comprobando con Google…</p>';
+  try{ const j=await (await fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)})).json();
+    if(!j.ok){ $('apis').innerHTML='<p class="mal">'+esc(j.error||'No se pudo')+'</p>'; return; }
+    pintaApis(j.apis); $('apis').insertAdjacentHTML('afterbegin','<p class="ok">✓ '+esc(j.msg)+'</p>');
+  }catch(e){ $('apis').innerHTML='<p class="mal">No conecto con el coche</p>'; } };
+$('bApis').onclick=async()=>{ $('apis').innerHTML='<p class="muted">Comprobando con Google…</p>';
+  try{ const j=await (await fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'comprobar',clave:$('gK').value})})).json(); pintaApis(j.apis); if(!j.ok) $('apis').innerHTML='<p class="mal">'+esc(j.error||'No se pudo')+'</p>'; }
+  catch(e){ $('apis').innerHTML='<p class="mal">No conecto con el coche</p>'; } };
+async function buscarOnline(){ $('secOnline').hidden=false; $('onl').textContent='Buscando…';
+  try{ const j=await (await fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'buscar'})})).json();
+    $('onl').innerHTML=(j.hay?'<b class="ok">Hay versión nueva: '+esc(j.nueva)+'</b>':'')+esc(j.hay?'':j.msg||''); $('bOnline').hidden=!j.hay; }
+  catch(e){ $('onl').textContent='No conecto con el coche'; } }
+$('bBuscar').onclick=buscarOnline; $('bOnline').onclick=()=>remoto({accion:'online'});
+fetch('/api/actualizar/estado').then(r=>r.json()).then(d=>{ if(d.online&&d.online.msg){ $('secOnline').hidden=false; $('onl').innerHTML=d.online.hay?'<b class="ok">Hay versión nueva: '+esc(d.online.nueva)+'</b>':esc(d.online.msg); $('bOnline').hidden=!d.online.hay; } }).catch(()=>{});
+$('bUrl').onclick=()=>{ const u=$('url').value.trim(); if(!u) return $('url').focus(); remoto({accion:'enlace',url:u}); };
+$('bAtras').onclick=()=>{ if(confirm('¿Volver a la versión anterior?')) remoto({accion:'deshacer'}); };
+</script>
+</body>
+</html>

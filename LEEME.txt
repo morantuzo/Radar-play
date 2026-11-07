@@ -1,0 +1,134 @@
+RADAR PLAY
+==========
+
+EN EL ORDENADOR (Windows)
+1. Doble clic en "Iniciar Radar Play.bat".
+   - Si tienes Python instalado, arranca el puente (con OBD-II si conectas un ELM327 por USB
+     y ejecutas una vez:  pip install pyserial).
+   - Si no, arranca igual, pero el motor va simulado.
+2. Deja abierta la ventana negra mientras lo uses.
+
+NAVEGACION
+- Busca un destino (o diselo a Siri), elige entre las rutas y pulsa Iniciar o Simular viaje.
+- Retenciones y tiempos reales de Google. Radares, avisos de otros conductores y limites
+  de velocidad son simulados (los limites se estiman por el tipo de via).
+- Para buscar sitios cercanos (gasolineras, aparcamiento...) activa tambien
+  "Places API (New)" en Google Cloud, en el mismo proyecto.
+
+SIRI
+- Boton redondo del dock o manten pulsado el boton de inicio. Usa el microfono del ordenador
+  (Chrome o Edge). Ejemplos: "Llevame a casa", "Pon musica de Estopa", "Llama a Mama",
+  "Dile a Alejandra que llego en diez minutos", "Cuanto falta", "Notifica un accidente".
+
+MANDO DESDE EL IPHONE (misma WiFi)
+- En Ajustes > Mando desde tu iPhone sale un codigo QR. Escanealo con la camara del iPhone.
+- La primera vez Windows pregunta si permites el acceso a Python: marca "Redes privadas".
+- Desde Google Maps del iPhone: Compartir > Copiar y pega el enlace en el mando.
+
+MAPAS (Google Maps normal)
+- El mapa es el de Google de siempre, con los iconos de tiendas, gasolineras, etc.
+  De noche pasa solo al modo noche de Google (a la hora de la puesta de sol).
+  En Estilos puedes fijarlo de dia o de noche, o volver a los estilos GTA.
+- Capas: Mapa, Satelite o Relieve; trafico, transporte publico, carriles bici y Street View.
+- Toca cualquier sitio del mapa para ver su ficha: fotos, valoracion, horario, telefono,
+  web, Street View, "Como llegar" o "Anadir parada" si ya vas navegando.
+- Manten pulsado un punto del mapa para ir alli o verlo en Street View.
+- Explorar: gasolineras, aparcamiento, restaurantes, talleres, cajeros... cerca de ti.
+- En Google Cloud activa: Maps JavaScript API, Routes API y Places API (New).
+  Sin Places API (New) el mapa funciona, pero no salen las fichas ni Explorar.
+
+GASOLINERAS (icono naranja)
+- Precios oficiales del Ministerio, actualizados cada media hora. La más barata cerca
+  (5, 10 o 25 km) o en tu ruta, cuánto ahorras frente a la media, abierta o cerrada,
+  "Ir" / "Añadir parada" y "Apuntar repostaje aquí" (pasa a Mi coche con el precio).
+
+PROBAR CON EL IPHONE DESDE EL PC
+1. Instala Python (python.org, marca "Add python.exe to PATH") si no lo tienes.
+2. Abre "Iniciar Radar Play". Si Windows pregunta por el Firewall: "Redes privadas" > Permitir.
+3. El iPhone en la misma WiFi que el PC. En Radar Play: Ajustes > Mando desde tu iPhone,
+   escanea el QR con la cámara y añade la página a la pantalla de inicio.
+4. Desde el iPhone: abrir el garaje, ver dónde está el coche y la gasolinera más barata,
+   mandar destinos, música, modo DNA y órdenes a Siri.
+   Las llamadas y la música del iPhone por Bluetooth solo funcionan en la Raspberry;
+   en el PC se usa el teléfono simulado.
+
+OTRAS FUNCIONES NUEVAS
+- Garaje: botón en el mapa, en el mando del iPhone y por voz. Al llegar a casa te pregunta
+  (o la abre sola con 5 s para cancelar). Ajustes > Garaje > "Guardar aquí" delante de la puerta.
+- Mi coche > Ruedas: presión, temperatura y pila de cada rueda con tapones TPMS Bluetooth.
+  Sin sensores, pulsa "Ver demostración".
+- Indicador de cambio de marcha en el mapa, nota de conducción eficiente por viaje,
+  aviso de descanso cada 2 horas y dónde quedó aparcado el coche.
+- Prestaciones: 0-100, 80-120, frenada 100-0 y medidor de fuerzas G (solo en circuito).
+- Motor: filtro de partículas (FAP), avisa cuando regenera para no apagar el motor.
+- Sistema: iPhone por Bluetooth, dashcam y lista de Hardware. Ajustes: luz ambiente LED.
+
+MI COCHE (icono rojo del coche en la pantalla de inicio)
+- Resumen: km totales, consumo real y estimado, km del mes y lo que toca en el taller.
+- Consumo: apunta cada repostaje (litros, euros, km). Con dos "llenos" calcula el
+  consumo real de cada deposito, el precio medio del litro y lo que cuestan 100 km.
+- Viajes: se apuntan solos al conducir (km, tiempo, velocidad media, consumo).
+- Taller: aceite, filtros (aire, polen, gasoil), correa de distribucion, correa de
+  accesorios, frenos, neumaticos, bateria, ITV, seguro e impuesto. Pulsa "Hecho" cuando
+  se cambie algo y queda en el historial con fecha, km, coste y taller.
+- Primer paso: en Resumen pulsa "Poner km" y escribe los km del cuadro. Luego, en Taller,
+  "Editar" en cada tarea para poner cuando se hizo por ultima vez.
+- Todo se guarda en la carpeta datos/ (no necesita internet). Haz copia de esa carpeta
+  si cambias de tarjeta SD. Los viajes simulados no suman km.
+- Necesita el puente: abre Radar Play con "Iniciar Radar Play" (en el PC) o en la Raspberry.
+
+NOVEDADES (noviembre)
+- YouTube: app nueva en el inicio. Tendencias, Música, Buscar, Guardados e
+  Historial. Para buscar, activa "YouTube Data API v3" en el mismo proyecto
+  de Google Cloud de tu clave de Maps (gratis). Puedes pegar enlaces o
+  mandarlos desde el iPhone. En marcha se tapa la imagen y sigue el sonido.
+  "YouTube completo" abre la web con tu cuenta en otra ventana (solo parado,
+  se cierra sola si arrancas).
+  Google Play no se puede poner: la Raspberry no es Android.
+- iPhone: Sistema > iPhone por Bluetooth > Probar el iPhone. Comprueba
+  conexion, llamadas, musica, contactos, altavoces y microfono, con una
+  llamada de prueba. Colgar ahora funciona aunque el iPhone tarde en cortar;
+  si no deja, la llamada pasa al iPhone.
+- ID de mapa: boton "Comprobar" que dice si vale y por que no. Si el mapa no
+  carga con el ID, arranca sin el y lo explica en Ajustes.
+- Siempre en Dynamic (Ajustes). Viene encendido.
+
+CLAVE DE GOOGLE SIN ESCRIBIRLA
+- En el mando del iPhone: "Clave de Google y actualizar". Pega la clave
+  (AIza...) y el ID de mapa y pulsa "Enviar al coche y comprobar". La
+  pantalla se recarga sola. Desde el PC, abre la direccion de Ajustes >
+  Google > Abrir en el movil.
+- APIs que hay que activar (mismo proyecto que la clave): Maps JavaScript
+  API, Routes API, Places API (New), Geocoding API y, para buscar en
+  YouTube, YouTube Data API v3. Ajustes > Google > Comprobar APIs dice
+  cual falta.
+
+GARAJE POR RADIO (433 MHz)
+- Emisor FS1000A: DATA al GPIO17 (pin 11), VCC 5 V, GND, antena de 17 cm.
+- Receptor RXB6: DATA al GPIO27 (pin 13), VCC 3,3 V (no 5 V), GND.
+- Ajustes > Garaje > Aprender mando: pulsa tu mando 2 veces delante.
+- Solo mandos de codigo fijo. Si es de codigo variable te lo dice: entonces
+  rele en paralelo con el boton de un mando (PIN_GARAJE).
+
+TIRA LED USB
+- Si se maneja con una app del movil (duoCo, Lotus Lamp, Happy Lighting,
+  ELK-BLEDOM...), va por Bluetooth: Ajustes > Luz ambiente > Buscar.
+  Cierra antes la app del movil (solo deja conectarse a uno).
+
+ACTUALIZAR SIN PENDRIVE
+- Por internet: Sistema > Actualizar > Buscar (y avisa solo). Necesita el
+  repositorio de GitHub morantuzo/radar-play (ACTUALIZAR_GITHUB en el conf).
+- Desde el iPhone (misma WiFi): guarda Radar-Play.zip en Archivos, abre el
+  mando y pulsa "Actualizar Radar Play" (o Sistema > Actualizar > Desde el
+  iPhone y escanea el QR). Elige el zip y espera: se reinicia solo.
+- Desde el PC: abre en el navegador la direccion que sale en Sistema >
+  Actualizar > Desde el iPhone.
+- En la Raspberry: si el zip esta en Descargas o en un pendrive, sale en
+  Sistema > Actualizar con un boton Instalar.
+- Tus datos (km, viajes, taller) y tu radar-play.conf no se tocan. La
+  version nueva de la configuracion se deja como radar-play.conf.nuevo.
+- Se guarda la version anterior: Sistema > Actualizar > Volver a ella.
+
+EN LA RASPBERRY PI
+Lee GUIA-RASPBERRY.txt: se instala una vez con  sudo bash sistema/instalar.sh
+y desde entonces arranca solo como sistema del coche.

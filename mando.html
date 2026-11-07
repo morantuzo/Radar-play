@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Radar Play">
+<title>Mando Radar Play</title>
+<style>
+:root{--bg:#06080b;--panel:#13171d;--panel-2:#1c2229;--line:#272e37;--fg:#f1f4f7;--muted:#8a94a1;--accent:#b44fe0;--ok:#34c46a;--stop:#ff4d4f;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 -apple-system,system-ui,"Segoe UI",sans-serif;
+  padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+h1{font-size:28px;margin:0 0 2px;font-weight:800;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 16px;font-size:14px}
+section{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:14px;margin-bottom:12px;display:flex;flex-direction:column;gap:10px}
+h2{font-size:13px;margin:0;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+input{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;color:var(--fg);font:inherit;font-size:16px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:12px 8px;background:var(--panel-2);color:var(--fg);flex:1;min-width:0}
+button.on{background:var(--accent);color:#fff}
+button:active{transform:scale(.97)}
+.ctl button{font-size:22px;padding:14px}
+.dna button{font-size:22px;font-weight:900}
+.tip{color:var(--muted);font-size:13px;margin:0}
+button.big{font-size:20px;padding:16px}
+.info{color:var(--muted);font-size:14.5px}.info b{color:var(--fg)}
+a.btn{flex:1;text-align:center;text-decoration:none;font-weight:700;border-radius:12px;padding:12px 8px;background:var(--panel-2);color:var(--fg)}
+.toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--accent);color:#fff;font-weight:700;padding:12px 18px;border-radius:12px;max-width:90vw;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.toast.err{background:var(--stop)}
+</style>
+</head>
+<body>
+<h1>Radar Play</h1>
+<p class="sub" id="st">Mando del coche · misma WiFi</p>
+
+<section>
+  <h2>Mi coche</h2>
+  <div class="row"><button class="on big" id="bGar" onclick="garaje()">Abrir garaje</button></div>
+  <div class="info" id="coche">Cargando…</div>
+  <div class="row"><a class="btn" id="aMapa" href="#" target="_blank" rel="noopener" hidden>Cómo llegar al coche</a></div>
+  <div class="info" id="gas"></div>
+</section>
+
+<section>
+  <h2>Destino</h2>
+  <input id="dest" placeholder="Dirección, sitio o enlace de Google Maps" autocomplete="off">
+  <div class="row"><button class="on" onclick="dest(true)">Ir ahora</button><button onclick="dest(false)">Ver rutas</button></div>
+  <div class="row"><button onclick="siri('Llévame a casa')">Casa</button><button onclick="siri('Llévame al trabajo')">Trabajo</button><button onclick="siri('Busca una gasolinera cerca')">Gasolinera</button></div>
+  <p class="tip">Desde la app de Google Maps: abre el sitio, pulsa <b>Compartir › Copiar</b> y pégalo aquí.</p>
+</section>
+
+<section>
+  <h2>Siri del coche</h2>
+  <input id="cmd" placeholder="«Pon música de Estopa», «¿Cuánto falta?»…" autocomplete="off">
+  <div class="row"><button class="on" onclick="siri(val('cmd'))">Enviar orden</button></div>
+  <p class="tip">Puedes dictar con el micrófono del teclado del iPhone.</p>
+</section>
+
+<section>
+  <h2>Música (YouTube)</h2>
+  <input id="mus" placeholder="Enlace de YouTube o canción" autocomplete="off">
+  <div class="row"><button class="on" onclick="send({type:'music',text:val('mus')})">Poner</button></div>
+  <div class="row ctl"><button onclick="send({type:'music',action:'prev'})" aria-label="Anterior">⏮</button><button onclick="send({type:'music',action:'toggle'})" aria-label="Reproducir o pausar">⏯</button><button onclick="send({type:'music',action:'next'})" aria-label="Siguiente">⏭</button></div>
+</section>
+
+<section>
+  <h2>Modo DNA</h2>
+  <div class="row dna"><button onclick="send({type:'dna',mode:'D'})" style="color:#ff2b34">D</button><button onclick="send({type:'dna',mode:'N'})">N</button><button onclick="send({type:'dna',mode:'A'})" style="color:#38b6ff">A</button></div>
+</section>
+
+<section>
+  <h2>Pruebas</h2>
+  <div class="row"><button onclick="send({type:'sim'})">Simular / parar viaje</button></div>
+  <input id="from" placeholder="De parte de… (p. ej. Mamá)" autocomplete="off">
+  <input id="msg" placeholder="Mensaje que llegará al coche" autocomplete="off">
+  <div class="row"><button onclick="send({type:'msg',from:val('from')||'iPhone',text:val('msg')})">Enviar mensaje al coche</button><button onclick="send({type:'call',from:val('from')||'iPhone'})">Llamar al coche</button></div>
+</section>
+
+<section>
+  <h2>Radar Play</h2>
+  <p class="tip">Pega la clave de Google y el ID de mapa, comprueba las APIs o instala una versión nueva.</p>
+  <div class="row"><a class="btn" id="aAct" href="/actualizar">Clave de Google y actualizar</a></div>
+</section>
+
+<div class="toast" id="toast"></div>
+<script>
+const K=new URLSearchParams(location.search).get('k')||'';
+document.getElementById('aAct').href='/actualizar?k='+encodeURIComponent(K);
+const val=id=>document.getElementById(id).value.trim();
+let tt=0;
+function toast(t,err){ const e=document.getElementById('toast'); e.textContent=t; e.className='toast show'+(err?' err':''); clearTimeout(tt); tt=setTimeout(()=>e.className='toast',2600); }
+async function send(o){
+  if((o.type==='msg'||o.type==='siri'||o.type==='dest')&&!o.text){ toast('Escribe algo primero',true); return; }
+  if(o.type==='music'&&!o.action&&!o.text){ toast('Escribe una canción o pega un enlace',true); return; }
+  try{
+    const r=await fetch('/api/cmd?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)});
+    const j=await r.json();
+    if(!j.ok){ toast(j.error||'No se pudo enviar',true); return; }
+    toast(o.type==='dest'?'Destino enviado: '+(j.dest||o.text):'Enviado al coche');
+  }catch(e){ toast('No conecto con el coche. ¿Estás en la misma WiFi y Radar Play abierto?',true); }
+}
+const dest=go=>send({type:'dest',text:val('dest'),go});
+const siri=t=>send({type:'siri',text:t});
+if(!K) document.getElementById('st').textContent='Falta el código: vuelve a escanear el QR de Ajustes';
+const $=id=>document.getElementById(id);
+const eur=v=>v.toFixed(3).replace('.',',');
+async function info(){
+  try{
+    const r=await fetch('/api/mando?k='+encodeURIComponent(K),{cache:'no-store'}); const d=await r.json();
+    if(!d.ok){ $('coche').textContent=d.error||'Sin datos'; return; }
+    const p=d.posicion, a=d.aparcado;
+    $('coche').innerHTML=(a?'<b>Aparcado</b> desde las '+String(a.desde).slice(11,16)+' del '+String(a.desde).slice(8,10)+'/'+String(a.desde).slice(5,7):p?'<b>En marcha o encendido</b>':'Todavía no sé dónde está el coche')
+      +(d.km_total!=null?' · '+Math.round(d.km_total).toLocaleString('es-ES')+' km':'')
+      +(d.pendientes&&d.pendientes.length?'<br>Taller: '+d.pendientes.map(x=>x.nombre).join(', '):'');
+    if(p){ $('aMapa').hidden=false; $('aMapa').href='https://www.google.com/maps/dir/?api=1&travelmode=walking&destination='+p.lat+','+p.lng; }
+    const g=d.gasolinera;
+    $('gas').innerHTML=g?'Gasóleo más barato cerca del coche: <b>'+eur(g.precio)+' €/l</b> en '+g.nombre+' ('+g.municipio+', a '+String(g.km).replace('.',',')+' km)':'';
+    $('bGar').textContent=d.garaje.activo?'Abrir garaje':'Abrir garaje (simulado)';
+  }catch(e){ $('coche').textContent='No conecto con el coche. ¿Estás en la misma WiFi?'; }
+}
+async function garaje(){
+  try{ const r=await fetch('/api/mando?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'garaje'})});
+    const j=await r.json(); toast(j.ok?(j.simulado?'Garaje pulsado (simulado: no hay relé)':'Abriendo el garaje'):(j.error||'No se pudo'),!j.ok); }
+  catch(e){ toast('No conecto con el coche',true); }
+}
+info(); setInterval(info,15000);
+</script>
+</body>
+</html>
