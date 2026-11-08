@@ -401,6 +401,8 @@ def parse_vcards(txt):
         for linea in bloque.splitlines():
             k, _, v = linea.partition(":")
             ku = k.upper()
+            if "." in ku.split(";")[0]:                  # «item1.TEL;…» (así exporta el iPhone)
+                ku = ku.split(".", 1)[1]
             if ku.startswith("FN"):
                 fn = v.strip()
             elif ku.startswith("N") and not fn and not ku.startswith("NOTE") and not ku.startswith("NICKNAME"):
@@ -412,6 +414,23 @@ def parse_vcards(txt):
             out.append({"n": fn.replace("\\,", ","), "t": tels})
     out.sort(key=lambda c: c["n"].lower())
     return out
+
+
+def importar_vcf(datos):
+    """Contactos subidos como archivo .vcf (exportados desde el iPhone o iCloud)."""
+    txt = datos.decode("utf-8", "ignore") if isinstance(datos, bytes) else str(datos)
+    lista = parse_vcards(txt)
+    if not lista:
+        return {"ok": False, "error": "No encuentro contactos con teléfono en ese archivo. Tiene que ser un .vcf"}
+    global contactos
+    contactos = lista
+    fecha = time.strftime("%Y-%m-%d %H:%M")
+    os.makedirs(os.path.dirname(CONTACTOS_F), exist_ok=True)
+    with open(CONTACTOS_F, "w", encoding="utf-8") as f:
+        json.dump({"fecha": fecha, "lista": lista, "origen": "archivo"}, f, ensure_ascii=False)
+    estado.update(contactos_n=len(lista), contactos_fecha=fecha, contactos_msg="%d contactos (subidos desde el móvil)" % len(lista), contactos_error=0)
+    LOG.info("Contactos: %d importados desde un archivo .vcf", len(lista), origen="bt")
+    return {"ok": True, "n": len(lista), "msg": "%d contactos cargados en Radar Play" % len(lista)}
 
 
 def descargar_contactos():

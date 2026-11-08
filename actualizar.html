@@ -50,6 +50,17 @@ input[type=file]{display:none}
 </section>
 
 <section>
+  <h2>Contactos</h2>
+  <ol>
+    <li>En el iPhone abre <b>Contactos</b> › <b>‹ Listas</b> › mantén pulsado <b>Todos los contactos</b> › <b>Exportar</b> › <b>Guardar en Archivos</b>.</li>
+    <li>Pulsa el botón y elige ese archivo <b>.vcf</b>.</li>
+  </ol>
+  <label class="btn" for="fc">Subir contactos (.vcf)</label>
+  <input type="file" id="fc" accept=".vcf,text/vcard,text/x-vcard">
+  <div id="fcR" class="muted"></div>
+</section>
+
+<section>
   <h2>Subir la versión nueva</h2>
   <ol>
     <li>Descarga <b>Radar-Play.zip</b> en este móvil u ordenador (en el iPhone: <b>Guardar en Archivos</b>).</li>
@@ -134,6 +145,10 @@ async function buscarOnline(){ $('secOnline').hidden=false; $('onl').textContent
   catch(e){ $('onl').textContent='No conecto con el coche'; } }
 $('bBuscar').onclick=buscarOnline; $('bOnline').onclick=()=>remoto({accion:'online'});
 fetch('/api/actualizar/estado').then(r=>r.json()).then(d=>{ if(d.online&&d.online.msg){ $('secOnline').hidden=false; $('onl').innerHTML=d.online.hay?'<b class="ok">Hay versión nueva: '+esc(d.online.nueva)+'</b>':esc(d.online.msg); $('bOnline').hidden=!d.online.hay; } }).catch(()=>{});
+$('fc').onchange=async()=>{ const f=$('fc').files[0]; if(!f) return; $('fcR').textContent='Subiendo '+f.name+'…';
+  try{ const j=await (await fetch('/api/actualizar/contactos?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'text/vcard'},body:f})).json();
+    $('fcR').innerHTML=j.ok?'<span class="ok">✓ '+esc(j.msg)+'</span>':'<span class="mal">'+esc(j.error||'No se pudo')+'</span>'; }
+  catch(e){ $('fcR').innerHTML='<span class="mal">No conecto con el coche</span>'; } $('fc').value=''; };
 $('bUrl').onclick=()=>{ const u=$('url').value.trim(); if(!u) return $('url').focus(); remoto({accion:'enlace',url:u}); };
 $('bAtras').onclick=()=>{ if(confirm('¿Volver a la versión anterior?')) remoto({accion:'deshacer'}); };
 </script>

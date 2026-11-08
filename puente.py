@@ -412,12 +412,17 @@ class Manejador(SimpleHTTPRequestHandler):
                 o.update(resolver_maps(o["text"]))
             nueva_orden(o)
             return self.responder({"ok": True, "dest": o.get("name")})
-        if ruta.path in ("/api/actualizar/subir", "/api/actualizar/remoto"):
+        if ruta.path in ("/api/actualizar/subir", "/api/actualizar/remoto", "/api/actualizar/contactos"):
             k = (urllib.parse.parse_qs(ruta.query).get("k") or [""])[0]
             if not self.es_local() and k != CODIGO:
                 LOG.aviso("Actualización rechazada desde %s (código incorrecto)", self.client_address[0])
                 return self.responder({"ok": False, "error": "Código incorrecto. Abre esta página desde el mando (escanea el QR)."}, 403)
             LOG.info("Actualización desde %s", self.client_address[0], origen="actualizar")
+            if ruta.path.endswith("contactos"):
+                n = int(self.headers.get("Content-Length") or 0)
+                if n <= 0 or n > 20_000_000:
+                    return self.responder({"ok": False, "error": "Archivo vacío o demasiado grande"})
+                return self.responder(BT.importar_vcf(self.rfile.read(n)))
             if ruta.path.endswith("subir"):
                 return self.responder(ACT.recibir(self.rfile, int(self.headers.get("Content-Length") or 0)))
             d = self.leer_json()
