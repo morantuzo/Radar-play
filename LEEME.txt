@@ -94,9 +94,10 @@ NOVEDADES (noviembre)
 - Siempre en Dynamic (Ajustes). Viene encendido.
 
 WHATSAPP
-- La app Mensajes ahora es WhatsApp: se ve WhatsApp Web en directo (chats,
-  desplazarte, escribir y Enviar). Solo con el coche parado; en marcha solo
-  salen los avisos arriba con el nombre de la persona o grupo.
+- La app Mensajes ahora es WhatsApp: tus chats reales (foto, ultimo mensaje,
+  hora, sin leer) con la interfaz de Radar Play. Abres un chat y ves los
+  mensajes (en grupos, quien escribe; numero si WhatsApp lo da) y puedes
+  contestar parado. En marcha, el texto se oculta (boton Leer).
 - Vienen de WhatsApp Web, abierto en segundo plano en la Raspberry. La
   primera vez: WhatsApp > Conectar WhatsApp y escanea el QR con el iPhone
   (WhatsApp > Ajustes > Dispositivos vinculados > Vincular un dispositivo).

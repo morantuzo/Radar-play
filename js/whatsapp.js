@@ -26,7 +26,7 @@ function waAviso(e){
   const nombre=e.titulo||'WhatsApp', quien=e.sub&&e.sub!==nombre?e.sub+' · ':'';
   if(PH.dnd){ decorate(); return; }
   notify({title:nombre,sub:'WhatsApp',body:waParado()?(quien+(e.texto||'')).slice(0,160):'Mensaje nuevo · toca «Leer» para oírlo',
-    acts:[['Leer',()=>readThread(nombre)],['Ver',()=>{ PH.open=nombre; setView('mensajes'); }]]});
+    acts:[['Leer',()=>readThread(nombre)],['Ver',()=>{ if(waEnVivo()){ setView('mensajes'); waAbrir(nombre); } else { PH.open=nombre; setView('mensajes'); } }]]});
   beep(1320,.08,2);
 }
 async function waPoll(){
@@ -36,12 +36,12 @@ async function waPoll(){
   let hay=false;
   for(const e of d.eventos||[]){
     WA.desde=Math.max(WA.desde,e.n);
-    if(e.tipo==='nuevo'){ const viendo=!!$('waImg'); if(viendo) e.previo=true;   // lo estás viendo en directo: sin aviso
+    if(e.tipo==='nuevo'){ const viendo=S.view==='mensajes'&&WA.abierto&&WA.abierto===e.titulo; if(viendo) e.previo=true;   // ya lo estás viendo: sin aviso
       waNuevo(e); if(!e.previo&&!WA.primera) waAviso(e); hay=true; }
     else if(e.tipo==='quitar'){ waQuitar(e.id); hay=true; }
   }
   WA.primera=false;
-  if(hay){ PH.save(); decorate(); if(!$('waImg')) refreshPhone(); }
+  if(hay){ PH.save(); decorate(); if(!waEnVivo()) refreshPhone(); }
   else if(S.view==='mensajes'&&antes!==JSON.stringify([d.suscrito,d.msg])) renderApp();
 }
 setInterval(waPoll,2000); setTimeout(waPoll,1500);
@@ -125,58 +125,91 @@ document.addEventListener('click',e=>{ const el=e.target.closest('[data-wa]'); i
   if(el.dataset.wa==='limpiar') confirmBox('¿Borrar la lista?','Solo se borra en Radar Play, no en el iPhone.','Borrar',()=>{ PH.threads={}; PH.save(); decorate(); renderApp(); });
 },true);
 
-/* ===================== WhatsApp Web en directo dentro de Radar Play ===================== */
-WA.modo=LS.get('rp-wa-modo')||'directo';
+/* ===================== Tus chats de WhatsApp con la interfaz de Radar Play =====================
+   WhatsApp Web sigue abierto en segundo plano; de ahí salen, en tiempo real, los chats (nombre,
+   foto, último mensaje, hora, sin leer) y los mensajes del chat que abres (quién, hora, número). */
+WA.chats=[]; WA.chat=null; WA.abierto=null;
 document.head.insertAdjacentHTML('beforeend',`<style>
-.wav{display:flex;flex-direction:column;gap:10px;min-height:0;padding-bottom:10px}
-.wa-live{flex:1;min-height:0;position:relative;border-radius:14px;overflow:hidden;background:#0b141a}
-.wa-live img{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;user-select:none;-webkit-user-drag:none;cursor:default}
-.wa-live .wa-c{position:absolute;inset:0;display:grid;place-items:center;color:#8696a0;text-align:center;padding:20px}
-.wa-esc{display:flex;gap:8px}.wa-esc input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:12px 16px;color:var(--fg);font:inherit;font-size:16px}
-.wa-tabs{display:flex;gap:6px}
+.wa-av{width:46px;height:46px;border-radius:50%;flex:none;object-fit:cover;background:#128c4a;display:grid;place-items:center;color:#fff;font-weight:800;font-size:18px;overflow:hidden}
+.wa-av img{width:100%;height:100%;object-fit:cover}
+.wa-nl{background:#25d366;color:#04140a;border-radius:12px;min-width:24px;height:24px;padding:0 7px;display:inline-grid;place-items:center;font-weight:800;font-size:13px}
+.wa-row .t small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-row .der{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+.wa-row .der .h{color:var(--muted);font-size:13px}.wa-row.nl .der .h{color:#25d366}
+.wa-cab{display:flex;align-items:center;gap:12px;min-width:0;font-style:normal}.wa-cab b{display:block;font-size:20px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.wa-cab small{display:block;color:var(--muted);font:500 14px/1.2 Inter,system-ui,sans-serif;font-style:normal}
+.wa-cab .wa-av{width:40px;height:40px;font-size:16px}
+.bub.me{background:#005c4b;color:#fff}.bub .au{display:block;font-size:13px;font-weight:700;color:#25d366;margin-bottom:2px}
+.wa-esc{display:flex;gap:8px;padding-top:10px}.wa-esc input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:12px 16px;color:var(--fg);font:inherit;font-size:16px}
 </style>`);
-const _vMsgWA=VIEWS.mensajes;
+const waAv=(nombre,foto)=>{ const ini=esc(((nombre||'?').replace(/^\+/,'')[0]||'?').toUpperCase());
+  return `<span class="wa-av">${foto?`<img src="${esc(foto)}" alt="${ini}" referrerpolicy="no-referrer" onerror="this.parentNode.textContent=this.alt">`:ini}</span>`; };
+const waNum=n=>n?'+'+n.replace(/^(\d{2})(\d{3})(\d{3})(\d{3})$/,'$1 $2 $3 $4'):'';
+const waEnVivo=()=>SYS.bridge&&WA.web&&WA.web.estado==='conectado';
+let waTick=0;
+async function waChatsPoll(){
+  if(!waEnVivo()) return;
+  if(S.view!=='mensajes'&&(waTick++%3)) return;            // fuera de la app, cada ~4 s (para la insignia)
+  try{
+    if(!WA.abierto){ const d=await (await fetch('/api/whatsapp/chats',{cache:'no-store'})).json(); const j=JSON.stringify(d.chats||[]);
+      if(j!==WA.chatsJ){ WA.chatsJ=j; WA.chats=d.chats||[]; decorate(); waPintar(); } }
+    else{ const d=await (await fetch('/api/whatsapp/chat',{cache:'no-store'})).json(); if(!d.chat) return; const j=JSON.stringify(d.chat);
+      if(j!==WA.chatJ){ WA.chatJ=j; WA.chat=d.chat; waPintar(true); } }
+  }catch(e){}
+}
+setInterval(waChatsPoll,1200);
+function waPintar(abajo){
+  if(S.view!=='mensajes') return;
+  const f=document.activeElement&&document.activeElement.id==='waIn', v=$('waIn')?$('waIn').value:'', b=$('bubs'), alFinal=!b||b.scrollHeight-b.scrollTop-b.clientHeight<80;
+  const l=document.querySelector('.abody .list'), sc=l?l.scrollTop:0;
+  renderApp();
+  if($('waIn')){ $('waIn').value=v; if(f) $('waIn').focus(); }
+  const b2=$('bubs'); if(b2&&(abajo&&alFinal||!b)) b2.scrollTop=b2.scrollHeight;
+  const l2=document.querySelector('.abody .list'); if(l2) l2.scrollTop=sc;
+}
+const _vMsgAvisos=VIEWS.mensajes;
 VIEWS.mensajes=()=>{
-  const w=WA.web;
-  if(!SYS.bridge||!w||w.estado!=='conectado'||PH.open||WA.modo==='avisos') {
-    const h=_vMsgWA();
-    return w&&w.estado==='conectado'&&!PH.open?h.replace('<div class="abody">',`<div class="abody"><div class="wa-tabs" style="margin-bottom:12px"><button class="pill" data-wa="modo" data-m="directo">WhatsApp</button><button class="pill on">Avisos</button></div>`):h;
-  }
+  if(!waEnVivo()) return _vMsgAvisos();
   const parado=waParado();
-  return `${appbar('WhatsApp',`<span class="wa-tabs"><button class="pill on">WhatsApp</button><button class="pill" data-wa="modo" data-m="avisos">Avisos</button></span>`)}
-  <div class="abody wav"><div class="wa-live" id="waLive">${parado?'<img id="waImg" alt="WhatsApp">':`<div class="wa-c"><div>${waIco}<br><b style="color:var(--fg)">Por seguridad, WhatsApp se ve con el coche parado</b><br>Los avisos te siguen llegando arriba.</div></div>`}</div>
-    ${parado?`<div class="wa-esc"><input id="waIn" placeholder="Escribe aquí y pulsa Enviar (abre antes el chat)" enterkeyhint="send" autocomplete="off"><button class="pill on" data-wa="enviar">Enviar</button></div>`:''}</div>`;
+  if(WA.abierto){
+    const c=WA.chat&&WA.chat.nombre===WA.abierto?WA.chat:null, ms=c?c.msgs:[];
+    const sub=c?(c.grupo?'Grupo':c.numero?waNum(c.numero):''):'Abriendo…';
+    return `${appbar(`<span class="wa-cab">${waAv(WA.abierto,c&&c.foto)}<span><b>${esc(WA.abierto)}</b><small>${esc(sub)}</small></span></span>`,`<button class="pill" data-wa="volver">Volver</button>`)}
+    <div class="abody msgv"><div class="bubbles" id="bubs">${ms.length?ms.map(m=>`<div class="bub ${m.yo?'me':''}">${c.grupo&&!m.yo&&(m.autor||m.de)?`<span class="au">${esc(m.autor||waNum(m.de))}</span>`:''}${parado||m.yo?esc(m.texto):'<i class="muted">Texto oculto mientras conduces</i>'}<small>${esc(m.hora)}</small></div>`).join(''):`<p class="muted">${c?'Sin mensajes cargados':'Cargando mensajes…'}</p>`}</div>
+      ${parado?`<div class="wa-esc"><input id="waIn" placeholder="Escribe un mensaje" enterkeyhint="send" autocomplete="off"><button class="pill on" data-wa="enviar">Enviar</button><button class="pill" data-wa="leer">Leer</button></div>`
+        :`<div class="qr"><button class="pill on" data-wa="leer">Leer en voz alta</button><span class="muted" style="align-self:center">Para escribir, para el coche</span></div>`}</div>`;
+  }
+  const lista=WA.chats||[];
+  return `${appbar('WhatsApp',`<span class="pill" style="display:inline-flex;gap:6px;align-items:center">${waIco} Conectado</span>`)}<div class="abody">
+    <div class="list">${lista.length?lista.map(c=>`<button class="row wa-row ${c.nl?'nl':''}" data-wa="abrir" data-n="${esc(c.nombre)}">${waAv(c.nombre,c.foto)}
+      <span class="t"><b>${esc(c.nombre)}</b><small>${esc(parado?c.prev:(c.nl?'Mensaje nuevo':c.prev?'…':''))}</small></span>
+      <span class="der"><span class="h">${esc(c.hora||'')}</span>${c.nl?`<span class="wa-nl">${c.nl}</span>`:''}</span></button>`).join('')
+      :'<p class="muted">Cargando tus chats…</p>'}</div>
+    <div style="margin-top:12px;display:flex;gap:8px"><button class="pill" data-wa="salir">Desvincular WhatsApp</button></div></div>`;
 };
-/* Tras pintar: arranca el vídeo con el tamaño exacto del hueco */
-const _renderAppWA=renderApp; renderApp=function(...a){ const r=_renderAppWA(...a); waVideo(); return r; };
-function waVideo(){
-  const img=$('waImg'); if(!img||img.dataset.on) return; img.dataset.on='1';
-  requestAnimationFrame(()=>{ const b=$('waLive').getBoundingClientRect(); WA.tam=[Math.round(b.width),Math.round(b.height)];
-    img.src='/api/whatsapp/pantalla?w='+WA.tam[0]+'&h='+WA.tam[1]+'&t='+Date.now(); waEventos(img); });
+/* Insignia del icono: mensajes sin leer de tus chats */
+{ const _un=PH.unread.bind(PH); PH.unread=()=>waEnVivo()?(WA.chats||[]).reduce((n,c)=>n+(c.nl||0),0):_un(); }
+async function waAbrir(nombre){
+  WA.abierto=nombre; WA.chat=null; WA.chatJ=''; renderApp();
+  const r=await api('/api/whatsapp',{accion:'abrir',nombre}).catch(()=>({ok:false,error:'Sin respuesta'}));
+  if(!r.ok){ toast(r.error||'No se pudo abrir'); WA.abierto=null; renderApp(); return; }
+  waChatsPoll();
 }
-const waIn=d=>fetch('/api/whatsapp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'entrada',...d})}).then(r=>r.json()).catch(()=>({ok:false}));
-function waEventos(img){
-  const xy=e=>{ const b=img.getBoundingClientRect(); return {x:(e.clientX-b.left)*(WA.tam[0]/b.width),y:(e.clientY-b.top)*(WA.tam[1]/b.height)}; };
-  let ini=null, ult=null, acc=0, tm=0;
-  img.addEventListener('pointerdown',e=>{ e.preventDefault(); ini=ult={x:e.clientX,y:e.clientY,p:xy(e)}; acc=0; try{ img.setPointerCapture(e.pointerId); }catch(x){} });
-  img.addEventListener('pointermove',e=>{ if(!ini) return; const dy=ult.y-e.clientY; ult={x:e.clientX,y:e.clientY,p:ult.p}; acc+=dy;
-    if(Math.abs(e.clientY-ini.y)>12&&!tm){ tm=setTimeout(()=>{ tm=0; if(acc){ waIn({t:'rueda',x:ini.p.x,y:ini.p.y,dy:acc*1.6}); acc=0; } },60); } });
-  img.addEventListener('pointerup',e=>{ if(!ini) return; const mov=Math.hypot(e.clientX-ini.x,e.clientY-ini.y); if(mov<12) waIn({t:'toque',...ini.p}); else if(acc) waIn({t:'rueda',x:ini.p.x,y:ini.p.y,dy:acc*1.6}); ini=null; });
-  img.addEventListener('wheel',e=>{ e.preventDefault(); const p=xy(e); waIn({t:'rueda',x:p.x,y:p.y,dy:e.deltaY}); },{passive:false});
-  img.addEventListener('error',()=>{ setTimeout(()=>{ if($('waImg')===img){ img.dataset.on=''; img.removeAttribute('src'); waVideo(); } },3000); });
-}
-/* Teclado del Raspberry: si no estás en un campo, las teclas van a WhatsApp */
-document.addEventListener('keydown',e=>{
-  if(!$('waImg')||S.view!=='mensajes'||(e.target&&/INPUT|TEXTAREA/.test(e.target.tagName))||e.ctrlKey||e.altKey||e.metaKey) return;
-  if(e.key.length===1){ e.preventDefault(); waIn({t:'texto',v:e.key}); }
-  else if(['Enter','Backspace','Escape','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Delete'].includes(e.key)){ e.preventDefault(); waIn({t:'tecla',k:e.key}); }
-});
+function waVolver(){ WA.abierto=null; WA.chat=null; api('/api/whatsapp',{accion:'cerrar_chat'}).catch(()=>{}); WA.chatsJ=''; renderApp(); waChatsPoll(); }
 async function waEnviar(){ const i=$('waIn'); if(!i) return; const v=i.value.trim(); if(!v) return;
   if(!waParado()) return toast('Para el coche para escribir');
-  const r=await waIn({t:'enviar',v}); if(r.ok){ i.value=''; } else toast(r.error||'No se pudo enviar'); }
+  const r=await api('/api/whatsapp',{accion:'entrada',t:'enviar',v}).catch(()=>({ok:false})); if(r.ok){ i.value=''; setTimeout(waChatsPoll,400); } else toast(r.error||'No se pudo enviar'); }
+function waLeer(){ const c=WA.chat; if(!c) return; const ult=c.msgs.filter(m=>!m.yo).slice(-3);
+  sayQ(ult.length?`${c.nombre}. `+ult.map(m=>(c.grupo&&m.autor?m.autor+' dice: ':'')+m.texto).join('. '):'No hay mensajes nuevos.'); }
 document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.target&&e.target.id==='waIn'){ e.preventDefault(); waEnviar(); } });
-document.addEventListener('click',e=>{ const el=e.target.closest('[data-wa="enviar"],[data-wa="modo"]'); if(!el) return; e.stopPropagation();
-  if(el.dataset.wa==='enviar') return waEnviar();
-  WA.modo=el.dataset.m; LS.set('rp-wa-modo',WA.modo); renderApp(); },true);
-/* Si arrancas, se corta el vídeo; al parar, vuelve */
-let waParAntes=null; setInterval(()=>{ const p=waParado(); if(p!==waParAntes){ const cambio=waParAntes!==null; waParAntes=p; if(cambio&&S.view==='mensajes'&&!PH.open&&!(document.activeElement&&document.activeElement.id==='waIn')) renderApp(); } },1500);
+document.addEventListener('click',e=>{ const el=e.target.closest('[data-wa="abrir"],[data-wa="volver"],[data-wa="enviar"],[data-wa="leer"]'); if(!el) return; e.stopPropagation();
+  const a=el.dataset.wa;
+  if(a==='abrir') return waAbrir(el.dataset.n);
+  if(a==='volver') return waVolver();
+  if(a==='enviar') return waEnviar();
+  if(a==='leer') return waLeer(); },true);
+/* Al salir de la app con un chat abierto, se cierra en WhatsApp (para que vuelvan los avisos) */
+const _setViewWA=setView; setView=function(v,...a){ if(v!=='mensajes'&&WA.abierto){ WA.abierto=null; api('/api/whatsapp',{accion:'cerrar_chat'}).catch(()=>{}); } const r=_setViewWA(v,...a); if(v==='mensajes') setTimeout(waChatsPoll,50); return r; };
+/* El aviso «Ver» abre el chat de verdad */
+const _waAvisoOrig=waAviso; waAviso=function(e){ _waAvisoOrig(e); };
+/* Si arrancas o paras, se vuelve a pintar (texto oculto / visible) */
+let waParAntes=null; setInterval(()=>{ const p=waParado(); if(p!==waParAntes){ const cambio=waParAntes!==null; waParAntes=p; if(cambio&&S.view==='mensajes'&&!(document.activeElement&&document.activeElement.id==='waIn')) renderApp(); } },1500);

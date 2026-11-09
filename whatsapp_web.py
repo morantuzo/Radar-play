@@ -45,7 +45,44 @@ INICIO = r"""
     });
     listo=true;
   }
-  new MutationObserver(()=>{ clearTimeout(t); t=setTimeout(revisar,250); }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label']});
+  /* Foto de la lista de chats y del chat abierto, para pintarlos en Radar Play */
+  const HORA=/^(\d{1,2}:\d{2}|ayer|hoy|lunes|martes|miércoles|jueves|viernes|sábado|domingo|\d{1,2}\/\d{1,2}\/\d{2,4})$/i;
+  function chats(){
+    const p=document.querySelector('#pane-side'); if(!p) return null;
+    return [...p.querySelectorAll('[role="listitem"], [role="row"]')].map(f=>{
+      const tit=[...f.querySelectorAll('span[title]')].map(x=>x.getAttribute('title')).filter(Boolean); if(!tit.length) return null;
+      const ul=f.querySelector('[aria-label*="no leído"],[aria-label*="unread"],[aria-label*="sin leer"]');
+      const img=f.querySelector('img'); let hora='';
+      f.querySelectorAll('div,span').forEach(x=>{ if(!hora&&!x.children.length){ const v=(x.textContent||'').trim(); if(HORA.test(v)) hora=v; } });
+      return {nombre:tit[0], prev:tit.length>1?tit[tit.length-1]:'', nl:ul?(parseInt(ul.textContent)||1):0, hora,
+        foto:img&&/^https:/.test(img.src)?img.src:'', silencio:!!f.querySelector('[data-icon*="muted"]')};
+    }).filter(Boolean);
+  }
+  function chatAbierto(){
+    const m=document.querySelector('#main'); if(!m) return null;
+    const cab=m.querySelector('header span[title], header span[dir="auto"]');
+    const nombre=cab?(cab.getAttribute('title')||cab.textContent||'').trim():'';
+    const fimg=m.querySelector('header img'); let jid='', grupo=false;
+    const filas=[...m.querySelectorAll('[data-id]')].filter(x=>/^(true|false)_/.test(x.getAttribute('data-id')||''));
+    const msgs=filas.slice(-80).map(x=>{ const id=x.getAttribute('data-id'), pz=id.split('_'); if(!jid){ jid=pz[1]||''; grupo=/@g\.us$/.test(jid); }
+      const cp=x.querySelector('[data-pre-plain-text]'), pre=cp?cp.getAttribute('data-pre-plain-text'):'';
+      const mm=pre.match(/^\[([^\]]+)\]\s*(.*?):\s*$/);
+      const te=x.querySelector('.selectable-text, span.copyable-text'); let texto=te?te.innerText.trim():'', tipo='texto';
+      if(!texto){ if(x.querySelector('img[src^="blob:"]')){ tipo='foto'; texto='📷 Foto'; } else if(x.querySelector('audio,[data-icon*="audio"],[data-icon*="ptt"]')){ tipo='audio'; texto='🎤 Audio'; }
+        else if(x.querySelector('video,[data-icon*="video"]')){ tipo='video'; texto='🎬 Vídeo'; } else if(x.querySelector('[data-icon*="sticker"], img[src*="sticker"]')){ tipo='sticker'; texto='Sticker'; }
+        else { texto=(x.innerText||'').split('\n').filter(l=>l.trim()&&!/^\d{1,2}:\d{2}$/.test(l.trim())).join(' ').slice(0,300); } }
+      const part=pz.length>3?pz[pz.length-1]:'';
+      return {id, yo:id.startsWith('true_'), autor:mm?mm[2]:'', hora:mm?mm[1].split(',')[0].trim():'', texto, tipo, de:/@c\.us$/.test(part)?part.split('@')[0]:''};
+    });
+    return {nombre, foto:fimg&&/^https:/.test(fimg.src)?fimg.src:'', numero:/@c\.us$/.test(jid)?jid.split('@')[0]:'', grupo, msgs};
+  }
+  let ultC='', ultM='';
+  function mandar(){
+    try{ const c=chats(); if(c){ const j=JSON.stringify(c); if(j!==ultC){ ultC=j; window.__rpChats(j); } }
+         const m=chatAbierto(); const jm=JSON.stringify(m); if(jm!==ultM){ ultM=jm; window.__rpChat(jm); } }catch(e){}
+  }
+  let t2=null;
+  new MutationObserver(()=>{ clearTimeout(t); t=setTimeout(revisar,250); clearTimeout(t2); t2=setTimeout(mandar,300); }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label','src']});
 })();
 """
 
@@ -189,9 +226,18 @@ def _aviso(payload):
     LOG.info("Aviso de WhatsApp nuevo (WhatsApp Web)", origen="whatsapp")      # sin nombre ni texto
 
 
+_datos = {"chats": [], "chats_t": 0, "chat": None, "chat_t": 0, "abierto": None}
+
+
 def _al_evento(metodo, p):
     if metodo == "Runtime.bindingCalled" and p.get("name") == "__rpAviso":
         _aviso(p.get("payload", ""))
+    elif metodo == "Runtime.bindingCalled" and p.get("name") == "__rpChats":
+        try: _datos.update(chats=json.loads(p.get("payload") or "[]")[:60], chats_t=time.time())
+        except Exception: pass
+    elif metodo == "Runtime.bindingCalled" and p.get("name") == "__rpChat":
+        try: _datos.update(chat=json.loads(p.get("payload") or "null"), chat_t=time.time())
+        except Exception: pass
     elif metodo == "Page.screencastFrame":
         with _foto["cond"]:
             _foto.update(jpg=base64.b64decode(p["data"]), n=_foto["n"] + 1)
@@ -352,6 +398,8 @@ def _sesion():
     cdp("Page.enable")
     cdp("Runtime.enable")
     cdp("Runtime.addBinding", name="__rpAviso")
+    cdp("Runtime.addBinding", name="__rpChats")
+    cdp("Runtime.addBinding", name="__rpChat")
     cdp("Page.addScriptToEvaluateOnNewDocument", source=INICIO)
     cdp("Emulation.setUserAgentOverride", userAgent=UA, acceptLanguage="es-ES,es")
     cdp("Page.navigate", url=URL)
@@ -431,10 +479,78 @@ def g_wa(q):
     return {**estado, "qr": _int["qr"] if estado["estado"] == "qr" else None}
 
 
+def _evaluar(cdp, js):
+    r = _seguro(cdp, "Runtime.evaluate", expression=js, returnByValue=True, awaitPromise=True)
+    return (r or {}).get("result", {}).get("value")
+
+
+def _clic(cdp, x, y):
+    for tipo in ("mouseMoved", "mousePressed", "mouseReleased"):
+        _seguro(cdp, "Input.dispatchMouseEvent", type=tipo, x=x, y=y, button="left" if tipo != "mouseMoved" else "none", clickCount=1)
+
+
+def abrir_chat(nombre):
+    """Abre ese chat en WhatsApp Web (si no se ve en la lista, lo busca)."""
+    cdp = _int["ws"]
+    if not cdp or estado["estado"] != "conectado":
+        return {"ok": False, "error": "WhatsApp no está conectado"}
+    n = json.dumps(nombre)
+    buscar = """(()=>{ const f=[...document.querySelectorAll('#pane-side [role="listitem"], #pane-side [role="row"]')]
+        .find(r=>{ const s=r.querySelector('span[title]'); return s&&s.getAttribute('title')===%s; });
+      if(!f) return null; f.scrollIntoView({block:'center'}); const b=f.getBoundingClientRect(); return {x:b.x+b.width/2,y:b.y+b.height/2}; })()""" % n
+    pos = _evaluar(cdp, buscar)
+    if not pos:                                  # no está a la vista: usa el buscador de WhatsApp
+        caja = _evaluar(cdp, """(()=>{ const c=document.querySelector('#side [contenteditable="true"], [aria-label*="Buscar"][contenteditable="true"], [aria-label*="Search"][contenteditable="true"]');
+          if(!c) return null; c.focus(); document.execCommand('selectAll'); document.execCommand('delete'); return true; })()""")
+        if caja:
+            _seguro(cdp, "Input.insertText", text=nombre)
+            for _ in range(10):
+                time.sleep(0.3)
+                pos = _evaluar(cdp, buscar)
+                if pos:
+                    break
+    if not pos:
+        return {"ok": False, "error": "No encuentro ese chat"}
+    _clic(cdp, pos["x"], pos["y"])
+    _evaluar(cdp, "window.__rpVisible=true; document.dispatchEvent(new Event('visibilitychange'))")   # lo estás leyendo: se marca leído
+    _datos["abierto"] = nombre
+    for _ in range(15):
+        time.sleep(0.2)
+        c = _datos.get("chat")
+        if c and c.get("nombre") == nombre:
+            break
+    return {"ok": True}
+
+
+def cerrar_chat():
+    cdp = _int["ws"]
+    _datos["abierto"] = None
+    if cdp:
+        _evaluar(cdp, "window.__rpVisible=false; document.dispatchEvent(new Event('visibilitychange'))")
+        for tipo in ("rawKeyDown", "keyUp"):
+            _seguro(cdp, "Input.dispatchKeyEvent", type=tipo, key="Escape", code="Escape", windowsVirtualKeyCode=27, nativeVirtualKeyCode=27)
+    return {"ok": True}
+
+
+def g_chats(q):
+    return {"estado": estado["estado"], "chats": _datos["chats"], "t": _datos["chats_t"]}
+
+
+def g_chat(q):
+    c = _datos.get("chat")
+    if not c or c.get("nombre") != _datos.get("abierto"):
+        return {"chat": None, "abierto": _datos.get("abierto")}
+    return {"chat": c, "abierto": _datos.get("abierto"), "t": _datos["chat_t"]}
+
+
 def p_wa(d):
     a = d.get("accion")
     if a == "entrada":
         return entrada(d)
+    if a == "abrir":
+        return abrir_chat(str(d.get("nombre") or ""))
+    if a == "cerrar_chat":
+        return cerrar_chat()
     if a == "reiniciar":
         cerrar_chromium()                      # el hilo lo vuelve a abrir
         return {"ok": True}
@@ -447,5 +563,5 @@ def p_wa(d):
     return {"ok": False, "error": "Acción desconocida"}
 
 
-GET = {"/api/whatsapp": g_wa}
+GET = {"/api/whatsapp": g_wa, "/api/whatsapp/chats": g_chats, "/api/whatsapp/chat": g_chat}
 POST = {"/api/whatsapp": p_wa}
