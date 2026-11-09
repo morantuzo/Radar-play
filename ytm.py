@@ -10,7 +10,7 @@ Radar Play · YouTube Music con TU cuenta (Premium)
 Herramientas no oficiales: si YouTube cambia algo puede fallar unos días;
 instalar.sh y Radar Play actualizan yt-dlp y ytmusicapi.
 """
-import glob, json, os, shutil, socket, subprocess, threading, time, urllib.request
+import glob, json, os, re, shutil, socket, subprocess, threading, time, urllib.request
 import registro as LOG
 
 CARPETA = os.path.dirname(os.path.abspath(__file__))
@@ -21,7 +21,7 @@ PUERTO = 9224
 SOCK = "/tmp/radar-play-mpv.sock"
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-estado = {"cuenta": False, "nombre": "", "foto": "", "msg": "", "login": False, "error": ""}
+estado = {"cuenta": False, "nombre": "", "foto": "", "msg": "", "login": False, "error": "", "preparando": False}
 rep = {"cola": [], "idx": -1, "pausa": True, "pos": 0.0, "dur": 0.0, "cargando": False, "vol": 100, "duck": False,
        "error": "", "repetir": "no", "n": 0}
 _int = {"yt": None, "proc_login": None, "mpv": None, "sock": None, "lock": threading.Lock(), "urls": {}, "rid": 0,
@@ -57,10 +57,74 @@ def _cargar_cuenta():
         LOG.aviso("YT Music: %s", e, origen="ytm")
 
 
+def _asegurar(despues=None):
+    """Si faltan ytmusicapi o yt-dlp (instalación antigua), los instala en segundo plano."""
+    if _hay_ytmusicapi() and _ytdlp():
+        if despues: despues()
+        return True
+    if estado["preparando"]:
+        return False
+
+    def hilo():
+        estado.update(preparando=True, msg="Preparando YouTube Music (se instala la primera vez, 1-2 minutos)…", error="")
+        r = subprocess.run([sys_python(), "-m", "pip", "install", "--user", "--break-system-packages", "-U", "-q", "yt-dlp[default]", "ytmusicapi"],
+                           capture_output=True, text=True, timeout=900)
+        estado["preparando"] = False
+        import importlib, site
+        importlib.invalidate_caches()
+        try:
+            if site.getusersitepackages() not in __import__("sys").path:
+                __import__("sys").path.append(site.getusersitepackages())
+        except Exception:
+            pass
+        if r.returncode != 0 or not _hay_ytmusicapi():
+            estado.update(msg="", error="No se pudo instalar lo necesario (¿hay internet?). " + (r.stderr or "")[-120:])
+            LOG.aviso("YT Music: instalación fallida: %s", (r.stderr or "")[-200:], origen="ytm")
+            return
+        LOG.info("YT Music: ytmusicapi y yt-dlp instalados", origen="ytm")
+        estado["msg"] = ""
+        if despues: despues()
+    threading.Thread(target=hilo, daemon=True, name="ytm-instalar").start()
+    return False
+
+
+def desde_cabeceras(texto):
+    """Plan B: pegas las «cabeceras de la petición» de music.youtube.com copiadas en el ordenador (F12 › Red)."""
+    texto = (texto or "").strip()
+    if "cookie" not in texto.lower():
+        return {"ok": False, "error": "No veo la línea «cookie» en lo que has pegado"}
+    if not _hay_ytmusicapi():
+        _asegurar()
+        return {"ok": False, "error": "Estoy instalando lo necesario. Vuelve a probar en 2 minutos"}
+    try:
+        import ytmusicapi
+        os.makedirs(os.path.dirname(AUTH), exist_ok=True)
+        ytmusicapi.setup(filepath=AUTH, headers_raw=texto)
+        os.chmod(AUTH, 0o600)
+        ck = json.load(open(AUTH)).get("cookie", "")
+        with open(COOKIES, "w") as f:
+            f.write("# Netscape HTTP Cookie File\n")
+            for par in ck.split(";"):
+                if "=" in par:
+                    k, v = par.strip().split("=", 1)
+                    f.write("\t".join([".youtube.com", "TRUE", "/", "TRUE", str(int(time.time()) + 180 * 86400), k, v]) + "\n")
+        os.chmod(COOKIES, 0o600)
+    except Exception as e:
+        return {"ok": False, "error": "No sirve: %s" % str(e)[:140]}
+    _int.update(yt=None, cache={})
+    _cargar_cuenta()
+    if not estado["cuenta"]:
+        return {"ok": False, "error": estado.get("error") or "No se pudo leer la cuenta"}
+    LOG.info("YT Music: sesión iniciada con cabeceras", origen="ytm")
+    return {"ok": True, "nombre": estado["nombre"]}
+
+
 def iniciar_sesion():
     """Abre una ventana de YouTube Music para entrar con tu cuenta. Cuando entras, guarda la sesión."""
     if estado["login"]:
         return {"ok": True}
+    if not _asegurar(lambda: iniciar_sesion()):
+        return {"ok": True, "preparando": True}
     sis = _int["sis"]
     nav = next((shutil.which(c) for c in ("chromium", "chromium-browser", "google-chrome") if shutil.which(c)), None)
     if not nav:
@@ -158,7 +222,10 @@ def cerrar_sesion():
 # ===================== Contenido de tu cuenta =====================
 def _foto(th):
     th = th or []
-    return (th[-1]["url"] if th else "").replace("w60-h60", "w400-h400").replace("w120-h120", "w400-h400")
+    u = th[-1]["url"] if th else ""
+    if "googleusercontent" in u or "ggpht" in u:
+        u = re.sub(r"=w\d+-h\d+[^&]*$", "=w544-h544-l90-rj", u)
+    return u
 
 
 def _artistas(x):
@@ -174,14 +241,17 @@ def _norm(x):
         return None
     if x.get("videoId"):
         return {"tipo": "cancion", "id": x["videoId"], "title": x.get("title", ""), "sub": _artistas(x) or x.get("author", ""),
-                "thumb": _foto(x.get("thumbnails") or (x.get("thumbnail") or [])), "dur": x.get("duration") or "",
+                "thumb": _foto(x.get("thumbnails") or (x.get("thumbnail") or [])), "dur": x.get("duration") or x.get("length") or "",
                 "album": (x.get("album") or {}).get("name", "") if isinstance(x.get("album"), dict) else ""}
-    if x.get("playlistId") and not x.get("browseId", "").startswith("MPRE"):
+    if x.get("playlistId") and not (x.get("browseId") or "").startswith("MPRE"):
         return {"tipo": "lista", "id": x["playlistId"], "title": x.get("title", ""), "sub": x.get("description") or _artistas(x) or x.get("author", "") or (str(x.get("count", "")) + " canciones" if x.get("count") else ""),
                 "thumb": _foto(x.get("thumbnails"))}
-    if x.get("browseId", "").startswith("MPRE") or x.get("type") in ("Album", "Single", "EP"):
+    if (x.get("browseId") or "").startswith("MPRE") or x.get("type") in ("Album", "Single", "EP"):
         return {"tipo": "album", "id": x.get("browseId"), "title": x.get("title", ""), "sub": _artistas(x) or x.get("year", ""), "thumb": _foto(x.get("thumbnails"))}
-    if x.get("browseId", "").startswith("UC"):
+    if (x.get("browseId") or "").startswith("VL"):                 # listas que salen al buscar
+        return {"tipo": "lista", "id": x["browseId"][2:], "title": x.get("title", ""), "sub": _artistas(x) or (x.get("author") if isinstance(x.get("author"), str) else "") or (str(x.get("itemCount", "")) + " canciones" if x.get("itemCount") else ""),
+                "thumb": _foto(x.get("thumbnails"))}
+    if (x.get("browseId") or "").startswith("UC"):
         return {"tipo": "artista", "id": x["browseId"], "title": x.get("title") or x.get("artist", ""), "sub": "Artista", "thumb": _foto(x.get("thumbnails"))}
     return None
 
@@ -228,6 +298,10 @@ def lista(pid):
             th = _foto(p.get("thumbnails"))
             canc = [dict(_norm(t) or {}, thumb=_foto(t.get("thumbnails")) or th) for t in p.get("tracks") or [] if t.get("videoId")]
             return {"title": p.get("title", ""), "sub": _artistas(p) + (" · " + str(p.get("year")) if p.get("year") else ""), "thumb": th, "items": canc}
+        if pid.startswith("RD"):                                   # tus mixes y radios
+            w = yt.get_watch_playlist(playlistId=pid, limit=50)
+            canc = [i for i in (_norm(t) for t in w.get("tracks") or []) if i and i["tipo"] == "cancion"]
+            return {"title": "Mix", "sub": "", "thumb": canc[0]["thumb"] if canc else "", "items": canc}
         p = yt.get_liked_songs(limit=500) if pid == "LM" else yt.get_playlist(pid, limit=300)
         canc = [i for i in (_norm(t) for t in p.get("tracks") or []) if i and i["tipo"] == "cancion"]
         return {"title": p.get("title") or ("Me gusta" if pid == "LM" else ""), "sub": (p.get("author") or {}).get("name", "") if isinstance(p.get("author"), dict) else "",
@@ -330,7 +404,8 @@ def _mpv():
     try: os.remove(SOCK)
     except Exception: pass
     _int["mpv"] = subprocess.Popen(["mpv", "--idle=yes", "--no-video", "--no-terminal", "--input-ipc-server=" + SOCK,
-                                    "--cache=yes", "--demuxer-max-bytes=20MiB", "--volume=%d" % rep["vol"]],
+                                    "--cache=yes", "--demuxer-max-bytes=20MiB", "--volume=%d" % rep["vol"]]
+                                   + (["--ao=" + os.environ["RP_MPV_AO"]] if os.environ.get("RP_MPV_AO") else []),
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     for _ in range(40):
         if os.path.exists(SOCK):
@@ -382,11 +457,17 @@ def _leer_mpv(s):
                         rep["pausa"] = bool(v)
                 elif ev == "file-loaded":
                     rep.update(cargando=False, error="")
+                    _int["fallos"] = 0
                 elif ev == "end-file" and m.get("reason") == "eof":
                     threading.Thread(target=siguiente, kwargs={"fin": True}, daemon=True).start()
                 elif ev == "end-file" and m.get("reason") == "error":
-                    rep.update(cargando=False, error="No se pudo reproducir")
-                    threading.Thread(target=siguiente, daemon=True).start()
+                    _int["fallos"] = _int.get("fallos", 0) + 1
+                    if _int["fallos"] >= 3:                      # algo va mal (sonido, internet): no recorre toda la cola
+                        rep.update(cargando=False, pausa=True, error="No se puede reproducir. Revisa el sonido y la conexión")
+                        LOG.aviso("YT Music: 3 fallos seguidos al reproducir", origen="ytm")
+                    else:
+                        rep.update(cargando=False, error="No se pudo reproducir esta canción, paso a la siguiente")
+                        threading.Thread(target=siguiente, daemon=True).start()
     except Exception:
         pass
     _int["sock"] = None
@@ -409,6 +490,7 @@ def _tocar_idx(i):
                 return
             _cmd("loadfile", url, "replace")
             _cmd("set_property", "pause", False)
+            rep["pausa"] = False                          # mpv solo avisa si cambia; aquí lo dejamos claro
             # Prepara la siguiente para que empiece sin espera
             if i + 1 < len(rep["cola"]):
                 try: _url(rep["cola"][i + 1]["id"])
@@ -566,6 +648,9 @@ def p_ytm(d):
     if a == "parar":
         parar()
         return {"ok": True}
+    if a == "duck":
+        duck(bool(d.get("on")))
+        return {"ok": True}
     return {"ok": False, "error": "Acción desconocida"}
 
 
@@ -592,6 +677,12 @@ def sys_python():
 
 def arrancar(sis, obd=None):
     _int["sis"] = sis
+    try:                                   # lo instalado con pip --user
+        import site, sys
+        if site.getusersitepackages() not in sys.path:
+            sys.path.append(site.getusersitepackages())
+    except Exception:
+        pass
     threading.Thread(target=_cargar_cuenta, daemon=True).start()
     if sis.ES_PI and os.path.exists(AUTH):          # solo cuando ya usas tu cuenta
         threading.Thread(target=_actualizar_herramientas, daemon=True, name="ytm-actualizar").start()

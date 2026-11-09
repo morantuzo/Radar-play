@@ -501,6 +501,12 @@ class Manejador(SimpleHTTPRequestHandler):
             if d.get("accion") in ("arranque_probar", "arranque_quitar", "arranque_ajustes"):
                 sub = d["accion"].split("_", 1)[1]
                 return self.responder(ARR.p_arr({**d, "accion": sub}))
+            if d.get("accion") == "ytm_login":                   # YouTube Music: abre la ventana para entrar en la pantalla
+                return self.responder(YTM.iniciar_sesion())
+            if d.get("accion") == "ytm_cabeceras":               # YouTube Music: plan B con las cabeceras del ordenador
+                return self.responder(YTM.desde_cabeceras(d.get("texto")))
+            if d.get("accion") == "ytm_estado":
+                return self.responder({k: YTM.estado[k] for k in ("cuenta", "nombre", "msg", "error", "login", "preparando")})
             if d.get("accion") not in ("enlace", "deshacer", "online"):
                 return self.responder({"ok": False, "error": "Acción no válida"}, 400)
             return self.responder(ACT.p_act(d))

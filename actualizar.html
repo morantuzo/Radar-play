@@ -50,6 +50,22 @@ input[type=file]{display:none}
 </section>
 
 <section>
+  <h2>YouTube Music</h2>
+  <div id="ytmEst" class="muted">Mirando…</div>
+  <button class="on" id="bYtm">Entrar con mi cuenta (se abre en la pantalla del coche)</button>
+  <details><summary class="muted">Si Google no te deja entrar en la pantalla: plan B con el ordenador</summary>
+    <ol class="muted" style="padding-left:20px">
+      <li>En el ordenador, abre <b>music.youtube.com</b> con tu cuenta.</li>
+      <li>Pulsa <b>F12</b> › pestaña <b>Red</b> (Network) y recarga la página.</li>
+      <li>Busca una petición que se llame <b>browse</b>, clic derecho › <b>Copiar › Copiar encabezados de solicitud</b>.</li>
+      <li>Pásatelo al iPhone (o abre esta página en el ordenador) y pégalo aquí.</li>
+    </ol>
+    <textarea id="ytmCab" rows="5" placeholder="Pega aquí las cabeceras (tienen una línea «cookie: …»)" style="width:100%;box-sizing:border-box;border-radius:12px;padding:12px;font:inherit;font-size:14px;background:var(--panel-2);color:var(--fg);border:0"></textarea>
+    <button id="bYtmCab">Usar estas cabeceras</button>
+  </details>
+</section>
+
+<section>
   <h2>Al encender</h2>
   <p class="muted" style="margin:0">Tu logo sale al arrancar (en Radar Play y al encender la Raspberry) y tu sonido suena una vez en cada encendido.</p>
   <div id="arrEst" class="muted"></div>
@@ -175,6 +191,17 @@ async function arrSubir(tipo,f){ if(!f) return; $('arrEst').textContent='Subiend
     alert(j.ok?j.msg:(j.error||'No se pudo')); }catch(e){ alert('No conecto con el coche'); } arrEstado(); }
 $('fLogo').onchange=()=>{ arrSubir('logo',$('fLogo').files[0]); $('fLogo').value=''; };
 $('fSon').onchange=()=>{ arrSubir('sonido',$('fSon').files[0]); $('fSon').value=''; };
+async function ytmEstado(){ const j=await fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'ytm_estado'})}).then(r=>r.json()).catch(()=>null);
+  if(!j) return; $('ytmEst').innerHTML=j.cuenta?'<b class="ok">✓ Sesión iniciada</b> '+esc(j.nombre||''):(j.error?'<b class="mal">'+esc(j.error)+'</b> ':'')+esc(j.msg||'Sin cuenta: entra para tener tus listas en el coche.');
+  $('bYtm').textContent=j.cuenta?'Cambiar de cuenta (se abre en la pantalla)':'Entrar con mi cuenta (se abre en la pantalla del coche)';
+  if(j.login||j.preparando) setTimeout(ytmEstado,3000); }
+$('bYtm').onclick=async()=>{ const j=await fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'ytm_login'})}).then(r=>r.json()).catch(()=>({ok:false,error:'No conecto con el coche'}));
+  $('ytmEst').innerHTML=j.ok?(j.preparando?'Preparando YouTube Music la primera vez (1-2 min)… luego se abre la ventana sola.':'Mira la pantalla del coche: entra con tu cuenta de Google. La ventana se cierra sola.'):'<b class="mal">'+esc(j.error||'No se pudo')+'</b>'; setTimeout(ytmEstado,3000); };
+$('bYtmCab').onclick=async()=>{ const t=$('ytmCab').value; if(!t.trim()) return $('ytmCab').focus();
+  $('ytmEst').textContent='Comprobando…';
+  const j=await fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'ytm_cabeceras',texto:t})}).then(r=>r.json()).catch(()=>({ok:false,error:'No conecto con el coche'}));
+  if(j.ok) $('ytmCab').value=''; $('ytmEst').innerHTML=j.ok?'<b class="ok">✓ Sesión iniciada</b> '+esc(j.nombre||''):'<b class="mal">'+esc(j.error||'No se pudo')+'</b>'; };
+ytmEstado();
 const arrRem=o=>fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(r=>r.json()).catch(()=>({ok:false}));
 $('bArrProbar').onclick=()=>arrRem({accion:'arranque_probar'});
 $('bArrQL').onclick=async()=>{ if(confirm('¿Quitar tu logo?')){ await arrRem({accion:'arranque_quitar',tipo:'logo'}); arrEstado(); } };

@@ -157,6 +157,22 @@ ACTUALIZAR SIN PENDRIVE
   version nueva de la configuracion se deja como radar-play.conf.nuevo.
 - Se guarda la version anterior: Sistema > Actualizar > Volver a ella.
 
+YOUTUBE MUSIC CON TU CUENTA (PREMIUM)
+- Abre YT Music en Radar Play y pulsa «Entrar con mi cuenta» (o desde el
+  mando del iPhone: Ajustes de Radar Play › YouTube Music). Se abre una
+  ventana de Google en la pantalla: entra con tu cuenta (en la Pi 400 con su
+  teclado). La ventana se cierra sola y la sesión queda guardada.
+- Tendrás tu Principal, tus listas (también las compartidas que tengas
+  guardadas), «Me gusta», álbumes, Explorar con las novedades y buscar sin
+  límite. 👍 se guarda en tu cuenta de verdad.
+- Suena en la Raspberry, sin anuncios, aunque cambies de pantalla. Los
+  botones de la tarjeta de música, el volante y Siri («pon en YouTube Music
+  Quevedo») la controlan. Al hablar el navegador, baja el volumen.
+- La primera vez instala lo necesario (1-2 minutos, con internet).
+- Si Google no te deja entrar en la pantalla: en el mando del iPhone hay un
+  «plan B» con las cabeceras copiadas desde el ordenador.
+- Sin cuenta sigue funcionando como antes (con la clave de YouTube).
+
 HAT CAN (WAVESHARE RS485 CAN HAT) · EL COCHE SIN ELM327
 - Radar Play lee el motor directamente del bus CAN del OBD. Si el HAT está
   puesto y el coche contesta, se usa antes que cualquier ELM327.

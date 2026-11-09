@@ -106,6 +106,12 @@ if ! sudo -u "$U" python3 -c "import bleak" 2>/dev/null; then
   apt-get install "${APTO[@]}" python3-bleak >/dev/null 2>&1 || sudo -u "$U" python3 -m pip install --user --break-system-packages bleak >/dev/null 2>&1 || echo "  · bleak no instalado (solo hace falta para los sensores de ruedas)"
 fi
 
+# YouTube Music con tu cuenta: ytmusicapi (tus listas) + yt-dlp (el sonido) + Node (lo necesita yt-dlp)
+instala no python3-pip nodejs
+if sudo -u "$U" timeout 600 python3 -m pip install --user --break-system-packages -U -q "yt-dlp[default]" ytmusicapi >/dev/null 2>&1; then
+  touch "$APP/datos/ytm-actualizado" 2>/dev/null; bien "YouTube Music (ytmusicapi y yt-dlp)"
+else echo "  · ytmusicapi / yt-dlp no instalados ahora: Radar Play lo intentará solo al entrar con tu cuenta"; fi
+
 # Voz natural en español (Piper). Si no se puede descargar, se usa pico2wave o espeak-ng
 PIPER="$H/.local/share/radar-play/piper"
 if [ ! -x "$PIPER/piper/piper" ] && [ "$(uname -m)" = "aarch64" ]; then
