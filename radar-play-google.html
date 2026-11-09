@@ -910,6 +910,7 @@ function placeYT(){
   const box=$('ytbox'); if(!box) return;
   if(!Y.has()){ if(!Y.loading) box.hidden=true; else { box.hidden=false; box.classList.add('mini'); } return; }
   box.hidden=false;
+  if(typeof window.ytSoloSonido==='function'&&window.ytSoloSonido()){ box.classList.remove('mini'); Object.assign(box.style,{left:'-4000px',top:'0px',width:'320px',height:'180px',right:'auto',bottom:'auto'}); return; }
   box.classList.toggle('marcha',(E.v||0)>8);           // en marcha: solo sonido, sin imagen
   const slot=[$('slotApp'),$('slotBig'),$('slotCard')].find(x=>x&&x.offsetParent!==null&&x.getBoundingClientRect().width>0);
   if(slot){ const r=slot.getBoundingClientRect(); box.classList.remove('mini'); Object.assign(box.style,{left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',right:'auto',bottom:'auto'}); }

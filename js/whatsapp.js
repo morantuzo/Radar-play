@@ -77,7 +77,7 @@ VIEWS.mensajes=()=>{
     <div class="list">${names.length?names.map(n=>{ const t=PH.threads[n], l=t.m.slice(-1)[0];
       return `<button class="row" data-ph="open" data-n="${esc(n)}"><span class="av" style="background:#128c4a">${esc(n[0]||'?')}</span><span class="t"><b>${t.unread?'<i class="dot"></i>':''}${esc(n)}</b><small>${l?esc(((l.sub&&l.sub!==n)?l.sub+': ':'')+(waParado()?l.x:'Mensaje')):''}</small></span><span class="muted">${l?hm(l.t):''}</span></button>`; }).join('')
       :`<p class="muted">${st.ok?'Aún no ha llegado ningún WhatsApp desde que conectaste.':'Cuando conectes el iPhone, aquí saldrán los WhatsApp que te lleguen.'}</p>`}</div>
-    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${names.length?'<button class="pill" data-wa="limpiar">Borrar la lista</button>':''}<button class="pill" data-wa="leermodo">Leer mensajes: ${WA_LEER_TXT[waLeerModo()]}</button>${SYS.bridge?'<button class="pill" data-wa="web-on">Usar WhatsApp Web (contestar · más pesado)</button>':''}</div>
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${names.length?'<button class="pill" data-wa="limpiar">Borrar la lista</button>':''}<button class="pill" data-wa="leermodo">Leer mensajes: ${WA_LEER_TXT[waLeerModo()]}</button>${SYS.bridge&&LS.get('rp-wa-web-visible')==='1'?'<button class="pill" data-wa="web-on">Usar WhatsApp Web (contestar · más pesado)</button>':''}</div>
     <p class="note" style="margin-top:12px">Modo ligero: los avisos llegan del iPhone por Bluetooth, con nombre y texto, y se leen en voz alta al conducir. Para contestar, usa el iPhone.</p></div>`;
 };
 function waConectar(){

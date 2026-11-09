@@ -78,13 +78,12 @@ MI COCHE (icono rojo del coche en la pantalla de inicio)
 - Necesita el puente: abre Radar Play con "Iniciar Radar Play" (en el PC) o en la Raspberry.
 
 NOVEDADES (noviembre)
-- YouTube: app nueva en el inicio. Tendencias, Música, Buscar, Guardados e
-  Historial. Para buscar, activa "YouTube Data API v3" en el mismo proyecto
-  de Google Cloud de tu clave de Maps (gratis). Puedes pegar enlaces o
-  mandarlos desde el iPhone. En marcha se tapa la imagen y sigue el sonido.
-  "YouTube completo" abre la web con tu cuenta en otra ventana (solo parado,
-  se cierra sola si arrancas).
-  Google Play no se puede poner: la Raspberry no es Android.
+- YT Music: como la app del movil. Principal (estados de animo, escuchar de
+  nuevo, exitos, listas), Explorar, Biblioteca (Me gusta, listas guardadas,
+  historial) y buscar. Minirreproductor y pantalla Reproduciendo con
+  portada, progreso, aleatorio, repetir, A continuacion y Cancion / Video.
+  Necesita "YouTube Data API v3" activada en el proyecto de tu clave.
+  Las busquedas se guardan 12 h para gastar poca cuota.
 - iPhone: Sistema > iPhone por Bluetooth > Probar el iPhone. Comprueba
   conexion, llamadas, musica, contactos, altavoces y microfono, con una
   llamada de prueba. Colgar ahora funciona aunque el iPhone tarde en cortar;
