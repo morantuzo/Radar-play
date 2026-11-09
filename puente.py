@@ -35,9 +35,9 @@ import sistema_rp as SIS
 import registro as LOG
 LOG.iniciar(SIS.cargar_conf().get("LOG_NIVEL", "info"))
 import coche as COCHE
-import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ, ytm as YTM
-MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, YTM, LOG]
-NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz", "/api/ytm")    # muy frecuentes o grandes
+import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ, ytm as YTM, arranque as ARR
+MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, YTM, ARR, LOG]
+NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz", "/api/ytm", "/api/arranque")    # muy frecuentes o grandes
 _c = SIS.cargar_conf()
 if os.path.exists(SIS.CONF_FILE):
     PUERTO_WEB = int(_c["PUERTO"])
@@ -357,6 +357,18 @@ class Manejador(SimpleHTTPRequestHandler):
         if ruta.path == "/api/whatsapp/pantalla" and self.es_local():   # WhatsApp Web en directo (imágenes MJPEG)
             q = urllib.parse.parse_qs(ruta.query)
             return WAW.emitir(self, int((q.get("w") or ["1100"])[0]), int((q.get("h") or ["650"])[0]))
+        if ruta.path == "/arranque/logo.png":                      # tu logo de arranque
+            l = ARR.logo()
+            if not l:
+                self.send_error(404); return
+            b = open(l, "rb").read()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png" if l.endswith(".png") else "image/jpeg")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
+            return
         if ruta.path == "/api/actualizar/registro":               # descargar el registro de fallos desde el iPhone (con código)
             q = urllib.parse.parse_qs(ruta.query)
             if not self.es_local() and (q.get("k") or [""])[0] != CODIGO:
@@ -436,12 +448,18 @@ class Manejador(SimpleHTTPRequestHandler):
                 o.update(resolver_maps(o["text"]))
             nueva_orden(o)
             return self.responder({"ok": True, "dest": o.get("name")})
-        if ruta.path in ("/api/actualizar/subir", "/api/actualizar/remoto", "/api/actualizar/contactos"):
+        if ruta.path in ("/api/actualizar/subir", "/api/actualizar/remoto", "/api/actualizar/contactos", "/api/actualizar/arranque"):
             k = (urllib.parse.parse_qs(ruta.query).get("k") or [""])[0]
             if not self.es_local() and k != CODIGO:
                 LOG.aviso("Actualización rechazada desde %s (código incorrecto)", self.client_address[0])
                 return self.responder({"ok": False, "error": "Código incorrecto. Abre esta página desde el mando (escanea el QR)."}, 403)
             LOG.info("Actualización desde %s", self.client_address[0], origen="actualizar")
+            if ruta.path.endswith("arranque"):                  # logo o sonido de arranque desde el iPhone
+                n = int(self.headers.get("Content-Length") or 0)
+                if n <= 0 or n > 25_000_000:
+                    return self.responder({"ok": False, "error": "Archivo vacío o demasiado grande (máximo 25 MB)"})
+                tipo = (urllib.parse.parse_qs(ruta.query).get("tipo") or [""])[0]
+                return self.responder(ARR.subir(tipo, self.rfile.read(n), self.headers.get("Content-Type")))
             if ruta.path.endswith("contactos"):
                 n = int(self.headers.get("Content-Length") or 0)
                 if n <= 0 or n > 20_000_000:
@@ -454,6 +472,9 @@ class Manejador(SimpleHTTPRequestHandler):
                 return self.responder(GCFG.p_google({**d, "accion": None if d.get("accion") == "google" else "comprobar"}))
             if d.get("accion") == "buscar":
                 return self.responder(ACT.buscar_online())
+            if d.get("accion") in ("arranque_probar", "arranque_quitar", "arranque_ajustes"):
+                sub = d["accion"].split("_", 1)[1]
+                return self.responder(ARR.p_arr({**d, "accion": sub}))
             if d.get("accion") not in ("enlace", "deshacer", "online"):
                 return self.responder({"ok": False, "error": "Acción no válida"}, 400)
             return self.responder(ACT.p_act(d))

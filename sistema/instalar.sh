@@ -99,7 +99,7 @@ else
   instala si "$CH"
 fi
 instala si python3 python3-serial curl
-instala no espeak-ng libttspico-utils python3-gpiozero python3-lgpio gpsd gpsd-clients unzip rsync wlr-randr
+instala no espeak-ng libttspico-utils python3-pil mpv python3-gpiozero python3-lgpio gpsd gpsd-clients unzip rsync wlr-randr
 echo "  Piezas opcionales (Bluetooth del iPhone, ruedas, acelerómetro, LEDs, dashcam):"
 instala no bluez bluez-obexd ofono python3-dbus python3-gi python3-smbus python3-spidev ffmpeg v4l-utils i2c-tools pulseaudio-utils pipewire-bin alsa-utils
 if ! sudo -u "$U" python3 -c "import bleak" 2>/dev/null; then
@@ -233,7 +233,9 @@ if [ -f "$CMD" ] && [ -f "$CFG" ]; then
 else mal "No encuentro $CMD (¿es Raspberry Pi OS?)"; fi
 T=/usr/share/plymouth/themes/pix
 if [ -d "$T" ]; then
-  copia "$T/splash.png"; cp "$APP/sistema/splash.png" "$T/splash.png"
+  copia "$T/splash.png"
+  if [ -f "$APP/datos/splash-arranque.png" ]; then cp "$APP/datos/splash-arranque.png" "$T/splash.png"   # tu logo
+  else cp "$APP/sistema/splash.png" "$T/splash.png"; fi
   command -v plymouth-set-default-theme >/dev/null && plymouth-set-default-theme pix
   command -v update-initramfs >/dev/null && update-initramfs -u >/dev/null 2>&1
   bien "Logo de Radar Play al encender"

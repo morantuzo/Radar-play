@@ -92,6 +92,13 @@ NOVEDADES (noviembre)
   carga con el ID, arranca sin el y lo explica en Ajustes.
 - Siempre en Dynamic (Ajustes). Viene encendido.
 
+TU LOGO Y TU SONIDO AL ENCENDER
+- En el mando del iPhone: "Ajustes de Radar Play" > Al encender. Sube una
+  imagen (tu logo) y un audio (MP3, M4A, WAV).
+- El logo sale en el arranque de Radar Play y, desde el siguiente
+  reinicio, tambien al encender la Raspberry. El sonido suena una vez por
+  encendido. Volumen, probar y apagar en Ajustes > Arranque.
+
 WHATSAPP
 - La app Mensajes ahora es WhatsApp: tus chats reales (foto, ultimo mensaje,
   hora, sin leer) con la interfaz de Radar Play. Abres un chat y ves los

@@ -50,6 +50,15 @@ input[type=file]{display:none}
 </section>
 
 <section>
+  <h2>Al encender</h2>
+  <p class="muted" style="margin:0">Tu logo sale al arrancar (en Radar Play y al encender la Raspberry) y tu sonido suena una vez en cada encendido.</p>
+  <div id="arrEst" class="muted"></div>
+  <label class="btn on" for="fLogo">Subir logo (imagen)</label><input type="file" id="fLogo" accept="image/png,image/jpeg,image/*">
+  <label class="btn" for="fSon">Subir sonido (MP3, M4A, WAV)</label><input type="file" id="fSon" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac">
+  <div style="display:flex;gap:8px"><button id="bArrProbar">Probar sonido</button><button id="bArrQL">Quitar logo</button><button id="bArrQS">Quitar sonido</button></div>
+</section>
+
+<section>
   <h2>Registro de fallos</h2>
   <p class="muted" style="margin:0">Descarga lo que ha pasado en Radar Play para ver los fallos de cerca (o mandármelo). En el iPhone se abre y puedes guardarlo en Archivos con Compartir.</p>
   <div class="muted" id="regN"></div>
@@ -157,6 +166,18 @@ $('fc').onchange=async()=>{ const f=$('fc').files[0]; if(!f) return; $('fcR').te
   try{ const j=await (await fetch('/api/actualizar/contactos?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'text/vcard'},body:f})).json();
     $('fcR').innerHTML=j.ok?'<span class="ok">✓ '+esc(j.msg)+'</span>':'<span class="mal">'+esc(j.error||'No se pudo')+'</span>'; }
   catch(e){ $('fcR').innerHTML='<span class="mal">No conecto con el coche</span>'; } $('fc').value=''; };
+async function arrEstado(){ try{ const d=await (await fetch('/api/arranque',{cache:'no-store'})).json();
+    $('arrEst').innerHTML=(d.logo?`<img src="/arranque/logo.png?t=${d.logo_t}" style="height:64px;background:#000;border-radius:8px;vertical-align:middle;margin-right:8px">`:'Sin logo · ')+(d.sonido?'Sonido: '+esc(d.sonido_nombre):'Sin sonido'); }catch(e){} }
+arrEstado();
+async function arrSubir(tipo,f){ if(!f) return; $('arrEst').textContent='Subiendo '+f.name+'…';
+  try{ const j=await (await fetch('/api/actualizar/arranque?tipo='+tipo+'&k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':f.type||'application/octet-stream'},body:f})).json();
+    alert(j.ok?j.msg:(j.error||'No se pudo')); }catch(e){ alert('No conecto con el coche'); } arrEstado(); }
+$('fLogo').onchange=()=>{ arrSubir('logo',$('fLogo').files[0]); $('fLogo').value=''; };
+$('fSon').onchange=()=>{ arrSubir('sonido',$('fSon').files[0]); $('fSon').value=''; };
+const arrRem=o=>fetch('/api/actualizar/remoto?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}).then(r=>r.json()).catch(()=>({ok:false}));
+$('bArrProbar').onclick=()=>arrRem({accion:'arranque_probar'});
+$('bArrQL').onclick=async()=>{ if(confirm('¿Quitar tu logo?')){ await arrRem({accion:'arranque_quitar',tipo:'logo'}); arrEstado(); } };
+$('bArrQS').onclick=async()=>{ if(confirm('¿Quitar tu sonido?')){ await arrRem({accion:'arranque_quitar',tipo:'sonido'}); arrEstado(); } };
 $('aRegE').href='/api/actualizar/registro?tipo=errores&k='+encodeURIComponent(K);
 $('aRegT').href='/api/actualizar/registro?tipo=todo&k='+encodeURIComponent(K);
 $('bUrl').onclick=()=>{ const u=$('url').value.trim(); if(!u) return $('url').focus(); remoto({accion:'enlace',url:u}); };
