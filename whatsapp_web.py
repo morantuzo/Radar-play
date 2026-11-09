@@ -20,15 +20,32 @@ _int = {"proc": None, "ws": None, "qr": None, "qr_t": 0, "parar": False, "sis": 
 
 # Se ejecuta en WhatsApp Web antes que su código: sus avisos (Notification) pasan a Radar Play
 INICIO = r"""
-(()=>{ const enviar=(t,o)=>{ try{ window.__rpAviso(JSON.stringify({title:String(t||''),body:String(o&&o.body||''),tag:String(o&&o.tag||'')})); }catch(e){} };
+(()=>{ const enviar=(t,o,org)=>{ try{ window.__rpAviso(JSON.stringify({title:String(t||''),body:String(o&&o.body||''),tag:String(o&&o.tag||''),origen:org||'aviso'})); }catch(e){} };
   function N(t,o){ enviar(t,o); this.title=t; this.body=o&&o.body; this.close=()=>{}; this.addEventListener=()=>{}; this.removeEventListener=()=>{}; }
   N.permission='granted'; N.requestPermission=cb=>{ if(cb) cb('granted'); return Promise.resolve('granted'); };
   try{ Object.defineProperty(window,'Notification',{value:N,writable:true,configurable:true}); }catch(e){}
   try{ if(window.ServiceWorkerRegistration) ServiceWorkerRegistration.prototype.showNotification=function(t,o){ enviar(t,o); return Promise.resolve(); }; }catch(e){}
   try{ const q=navigator.permissions.query.bind(navigator.permissions);
        navigator.permissions.query=p=>p&&p.name==='notifications'?Promise.resolve({state:'granted',onchange:null}):q(p); }catch(e){}
-  /* Siempre «en segundo plano», que es cuando WhatsApp avisa */
-  try{ Object.defineProperty(document,'hidden',{get:()=>true}); Object.defineProperty(document,'visibilityState',{get:()=>'hidden'}); document.hasFocus=()=>false; }catch(e){}
+  /* Sin nadie mirando, WhatsApp «en segundo plano» (así avisa). Cuando lo abres en Radar Play, visible */
+  window.__rpVisible=false;
+  try{ Object.defineProperty(document,'hidden',{get:()=>!window.__rpVisible}); Object.defineProperty(document,'visibilityState',{get:()=>window.__rpVisible?'visible':'hidden'});
+       document.hasFocus=()=>!!window.__rpVisible; }catch(e){}
+  /* Más rápido que los avisos: mira la lista de chats y avisa cuando un chat con mensajes sin leer cambia */
+  const visto=new Map(); let listo=false, t=null;
+  function revisar(){
+    const lista=document.querySelector('#pane-side'); if(!lista) return;
+    lista.querySelectorAll('[role="listitem"], [role="row"]').forEach(f=>{
+      const tit=[...f.querySelectorAll('span[title]')].map(x=>x.getAttribute('title')).filter(Boolean);
+      if(!tit.length) return; const nombre=tit[0], prev=tit.length>1?tit[tit.length-1]:'';
+      const sinLeer=!!f.querySelector('[aria-label*="no leído"],[aria-label*="no leídos"],[aria-label*="unread"],[aria-label*="sin leer"]');
+      const k=nombre+'|'+prev;
+      if(listo&&sinLeer&&prev&&visto.get(nombre)!==k) enviar(nombre,{body:prev},'lista');
+      visto.set(nombre,k);
+    });
+    listo=true;
+  }
+  new MutationObserver(()=>{ clearTimeout(t); t=setTimeout(revisar,250); }).observe(document,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['title','aria-label']});
 })();
 """
 
@@ -147,6 +164,9 @@ class CDP:
 
 
 # ---------------- Avisos ----------------
+_vistos = {}
+
+
 def _aviso(payload):
     import ancs                                            # misma lista de avisos que lee la pantalla
     try:
@@ -156,6 +176,14 @@ def _aviso(payload):
     titulo, texto = (d.get("title") or "WhatsApp").strip(), (d.get("body") or "").strip()
     if not texto and titulo == "WhatsApp":
         return
+    # El mismo mensaje puede llegar por la lista de chats y por el aviso: solo una vez
+    clave, ahora = (titulo, texto[-60:]), time.time()
+    for k, t in list(_vistos.items()):
+        if ahora - t > 90:
+            _vistos.pop(k, None)
+    if clave in _vistos or any(k[0] == titulo and (k[1].endswith(texto[-30:]) or texto.endswith(k[1][-30:])) for k in _vistos if ahora - _vistos[k] < 20):
+        return
+    _vistos[clave] = ahora
     ancs._evento(tipo="nuevo", id="w%d%04d" % (time.time() * 1000, random.randint(0, 9999)), app="whatsapp",
                  titulo=titulo, sub="", texto=texto, t=int(time.time() * 1000), previo=False)
     LOG.info("Aviso de WhatsApp nuevo (WhatsApp Web)", origen="whatsapp")      # sin nombre ni texto
@@ -164,6 +192,119 @@ def _aviso(payload):
 def _al_evento(metodo, p):
     if metodo == "Runtime.bindingCalled" and p.get("name") == "__rpAviso":
         _aviso(p.get("payload", ""))
+    elif metodo == "Page.screencastFrame":
+        with _foto["cond"]:
+            _foto.update(jpg=base64.b64decode(p["data"]), n=_foto["n"] + 1)
+            _foto["cond"].notify_all()
+        cdp = _int["ws"]
+        if cdp:
+            threading.Thread(target=lambda: _seguro(cdp, "Page.screencastFrameAck", sessionId=p["sessionId"]), daemon=True).start()
+
+
+def _seguro(cdp, metodo, **kv):
+    try:
+        return cdp(metodo, timeout=5, **kv)
+    except Exception:
+        return None
+
+
+# ---------------- WhatsApp Web en directo dentro de Radar Play ----------------
+_foto = {"jpg": None, "n": 0, "cond": threading.Condition(), "mirando": 0, "tam": None}
+
+
+def _empezar_video(w, h):
+    cdp = _int["ws"]
+    if not cdp:
+        return
+    w, h = max(600, min(w, 1920)), max(400, min(h, 1200))
+    if _foto["tam"] != (w, h):
+        _seguro(cdp, "Emulation.setDeviceMetricsOverride", width=w, height=h, deviceScaleFactor=1, mobile=False)
+        _foto["tam"] = (w, h)
+    _seguro(cdp, "Runtime.evaluate", expression="window.__rpVisible=true; document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('focus'))")
+    _seguro(cdp, "Page.startScreencast", format="jpeg", quality=70, maxWidth=w, maxHeight=h, everyNthFrame=1)
+    r = _seguro(cdp, "Page.captureScreenshot", format="jpeg", quality=70)
+    if r:
+        with _foto["cond"]:
+            _foto.update(jpg=base64.b64decode(r["data"]), n=_foto["n"] + 1)
+            _foto["cond"].notify_all()
+
+
+def _parar_video():
+    cdp = _int["ws"]
+    if cdp:
+        _seguro(cdp, "Page.stopScreencast")
+        _seguro(cdp, "Runtime.evaluate", expression="window.__rpVisible=false; document.dispatchEvent(new Event('visibilitychange')); window.dispatchEvent(new Event('blur'))")
+
+
+def emitir(h, w, alto):
+    """Manda WhatsApp Web como vídeo MJPEG mientras la pantalla lo esté mirando."""
+    if estado["estado"] not in ("conectado", "qr", "cargando") or not _int["ws"]:
+        return h.responder({"ok": False, "error": "WhatsApp Web no está abierto"}, 503)
+    _foto["mirando"] += 1
+    _empezar_video(w, alto)
+    try:
+        h.send_response(200)
+        h.send_header("Content-Type", "multipart/x-mixed-replace; boundary=rpframe")
+        h.send_header("Cache-Control", "no-store")
+        h.end_headers()
+        ult = -1
+        while estado["estado"] in ("conectado", "qr", "cargando"):
+            with _foto["cond"]:
+                _foto["cond"].wait_for(lambda: _foto["n"] != ult, timeout=10)
+                jpg, ult = _foto["jpg"], _foto["n"]
+            if not jpg:
+                continue
+            h.wfile.write(b"--rpframe\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n" % len(jpg) + jpg + b"\r\n")
+            h.wfile.flush()
+    except Exception:
+        pass
+    finally:
+        _foto["mirando"] -= 1
+        if _foto["mirando"] <= 0:
+            _foto["mirando"] = 0
+            _parar_video()
+
+
+TECLAS = {"Enter": (13, "\r"), "Backspace": (8, ""), "Escape": (27, ""), "Tab": (9, ""), "ArrowUp": (38, ""), "ArrowDown": (40, ""),
+          "ArrowLeft": (37, ""), "ArrowRight": (39, ""), "Delete": (46, "")}
+
+
+def entrada(d):
+    """Toques, rueda y teclado que llegan de la pantalla de Radar Play."""
+    cdp = _int["ws"]
+    if not cdp:
+        return {"ok": False}
+    t = d.get("t")
+    x, y = float(d.get("x", 0)), float(d.get("y", 0))
+    if t == "toque":
+        for tipo in ("mouseMoved", "mousePressed", "mouseReleased"):
+            _seguro(cdp, "Input.dispatchMouseEvent", type=tipo, x=x, y=y, button="left" if tipo != "mouseMoved" else "none", clickCount=1)
+    elif t == "rueda":
+        _seguro(cdp, "Input.dispatchMouseEvent", type="mouseWheel", x=x, y=y, deltaX=0, deltaY=float(d.get("dy", 0)))
+    elif t == "texto":
+        _seguro(cdp, "Input.insertText", text=str(d.get("v", ""))[:2000])
+    elif t == "enviar":                    # escribe en el chat abierto y pulsa Intro
+        r = _seguro(cdp, "Runtime.evaluate", returnByValue=True, expression=
+                    "(()=>{const c=document.querySelector('footer [contenteditable=\"true\"]'); if(!c) return false; c.focus(); return true;})()")
+        if not (r and r.get("result", {}).get("value")):
+            return {"ok": False, "error": "Abre primero un chat"}
+        _seguro(cdp, "Input.insertText", text=str(d.get("v", ""))[:2000])
+        time.sleep(0.15)
+        base = {"key": "Enter", "code": "Enter", "windowsVirtualKeyCode": 13, "nativeVirtualKeyCode": 13}
+        _seguro(cdp, "Input.dispatchKeyEvent", type="rawKeyDown", **base)
+        _seguro(cdp, "Input.dispatchKeyEvent", type="char", text="\r", **base)
+        _seguro(cdp, "Input.dispatchKeyEvent", type="keyUp", **base)
+        LOG.info("WhatsApp: mensaje enviado desde Radar Play", origen="whatsapp")
+    elif t == "tecla":
+        k = str(d.get("k", ""))
+        code, txt = TECLAS.get(k, (0, ""))
+        if code:
+            base = {"key": k, "code": k, "windowsVirtualKeyCode": code, "nativeVirtualKeyCode": code}
+            _seguro(cdp, "Input.dispatchKeyEvent", type="rawKeyDown", **base)
+            if txt:
+                _seguro(cdp, "Input.dispatchKeyEvent", type="char", text=txt, **base)
+            _seguro(cdp, "Input.dispatchKeyEvent", type="keyUp", **base)
+    return {"ok": True}
 
 
 def _navegador():
@@ -187,7 +328,8 @@ def _arrancar_chromium():
         [nav, "--headless=new", "--remote-debugging-port=%d" % PUERTO, "--remote-allow-origins=*",
          "--user-data-dir=" + PERFIL, "--user-agent=" + UA, "--window-size=1100,850", "--lang=es-ES",
          "--no-first-run", "--no-default-browser-check", "--mute-audio", "--password-store=basic",
-         "--disable-features=Translate", "about:blank"],
+         "--disable-features=Translate", "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+         "--disable-backgrounding-occluded-windows", "about:blank"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     for _ in range(40):
         try:
@@ -206,6 +348,7 @@ def _sesion():
     url = _arrancar_chromium()
     cdp = CDP(url, _al_evento)
     _int["ws"] = cdp
+    _foto["tam"] = None
     cdp("Page.enable")
     cdp("Runtime.enable")
     cdp("Runtime.addBinding", name="__rpAviso")
@@ -290,6 +433,8 @@ def g_wa(q):
 
 def p_wa(d):
     a = d.get("accion")
+    if a == "entrada":
+        return entrada(d)
     if a == "reiniciar":
         cerrar_chromium()                      # el hilo lo vuelve a abrir
         return {"ok": True}

@@ -37,7 +37,7 @@ LOG.iniciar(SIS.cargar_conf().get("LOG_NIVEL", "info"))
 import coche as COCHE
 import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW
 MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, LOG]
-NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes")    # muy frecuentes o grandes
+NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp")    # muy frecuentes o grandes
 _c = SIS.cargar_conf()
 if os.path.exists(SIS.CONF_FILE):
     PUERTO_WEB = int(_c["PUERTO"])
@@ -354,6 +354,9 @@ class Manejador(SimpleHTTPRequestHandler):
         if ruta.path in ("/actualizar", "/actualizar.html"):      # subir una versión nueva desde el iPhone o el PC
             self.path = "/actualizar.html"
             return super().do_GET()
+        if ruta.path == "/api/whatsapp/pantalla" and self.es_local():   # WhatsApp Web en directo (imágenes MJPEG)
+            q = urllib.parse.parse_qs(ruta.query)
+            return WAW.emitir(self, int((q.get("w") or ["1100"])[0]), int((q.get("h") or ["650"])[0]))
         if ruta.path == "/api/actualizar/estado":                 # solo versión y progreso (sin código: sigue tras reiniciar)
             i = ACT.info()
             return self.responder({k: i[k] for k in ("version", "anterior", "fase", "msg", "ok", "log", "completa", "online")})

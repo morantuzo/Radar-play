@@ -36,17 +36,18 @@ async function waPoll(){
   let hay=false;
   for(const e of d.eventos||[]){
     WA.desde=Math.max(WA.desde,e.n);
-    if(e.tipo==='nuevo'){ waNuevo(e); if(!e.previo&&!WA.primera) waAviso(e); hay=true; }
+    if(e.tipo==='nuevo'){ const viendo=!!$('waImg'); if(viendo) e.previo=true;   // lo estás viendo en directo: sin aviso
+      waNuevo(e); if(!e.previo&&!WA.primera) waAviso(e); hay=true; }
     else if(e.tipo==='quitar'){ waQuitar(e.id); hay=true; }
   }
   WA.primera=false;
-  if(hay){ PH.save(); decorate(); refreshPhone(); }
+  if(hay){ PH.save(); decorate(); if(!$('waImg')) refreshPhone(); }
   else if(S.view==='mensajes'&&antes!==JSON.stringify([d.suscrito,d.msg])) renderApp();
 }
 setInterval(waPoll,2000); setTimeout(waPoll,1500);
 /* Estado de WhatsApp Web en la Raspberry (QR / conectado) */
 async function waWebPoll(){ if(!SYS.bridge) return; try{ const d=await (await fetch('/api/whatsapp',{cache:'no-store'})).json();
-  const antes=WA.web&&WA.web.estado; WA.web=d; if(S.view==='mensajes'&&antes!==d.estado&&!$('waQR')) renderApp(); waQRPintar(); }catch(e){} }
+  const antes=WA.web&&WA.web.estado; WA.web=d; if(S.view==='mensajes'&&antes!==d.estado&&($('ov').hidden||!$('waQR'))) renderApp(); waQRPintar(); }catch(e){} }
 setInterval(waWebPoll,3000); setTimeout(waWebPoll,1000);
 
 /* No se puede contestar todavía: Siri «dile a…» avisa en vez de inventar un envío */
@@ -94,7 +95,7 @@ function waConectar(){
   $('cOv').onclick=closeOv; waQRPintar(); waWebPoll();
 }
 function waQRPintar(){
-  const box=$('waQR'), st=$('waSt'), w=WA.web||{}; if(!box) return;
+  const box=$('waQR'), st=$('waSt'), w=WA.web||{}; if(!box||$('ov').hidden) return;     // solo con la ventana del QR abierta
   if(w.estado==='conectado'){ closeOv(); toast('WhatsApp conectado. Tus mensajes saldrán aquí'); if(S.view==='mensajes') renderApp(); return; }
   if(w.qr){ if(box.dataset.qr!==w.qr.slice(-40)){ box.innerHTML=`<img src="${w.qr}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated" alt="Código QR de WhatsApp">`; box.dataset.qr=w.qr.slice(-40); } }
   else box.textContent=w.estado==='error'?'No carga':'Cargando…';
@@ -123,3 +124,59 @@ document.addEventListener('click',e=>{ const el=e.target.closest('[data-wa]'); i
   if(el.dataset.wa==='salir') confirmBox('¿Desvincular WhatsApp de Radar Play?','Dejarán de llegar los avisos hasta que vuelvas a escanear el código.','Desvincular',()=>api('/api/whatsapp',{accion:'cerrar_sesion'}).then(()=>{ toast('WhatsApp desvinculado'); }));
   if(el.dataset.wa==='limpiar') confirmBox('¿Borrar la lista?','Solo se borra en Radar Play, no en el iPhone.','Borrar',()=>{ PH.threads={}; PH.save(); decorate(); renderApp(); });
 },true);
+
+/* ===================== WhatsApp Web en directo dentro de Radar Play ===================== */
+WA.modo=LS.get('rp-wa-modo')||'directo';
+document.head.insertAdjacentHTML('beforeend',`<style>
+.wav{display:flex;flex-direction:column;gap:10px;min-height:0;padding-bottom:10px}
+.wa-live{flex:1;min-height:0;position:relative;border-radius:14px;overflow:hidden;background:#0b141a}
+.wa-live img{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;user-select:none;-webkit-user-drag:none;cursor:default}
+.wa-live .wa-c{position:absolute;inset:0;display:grid;place-items:center;color:#8696a0;text-align:center;padding:20px}
+.wa-esc{display:flex;gap:8px}.wa-esc input{flex:1;min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:12px 16px;color:var(--fg);font:inherit;font-size:16px}
+.wa-tabs{display:flex;gap:6px}
+</style>`);
+const _vMsgWA=VIEWS.mensajes;
+VIEWS.mensajes=()=>{
+  const w=WA.web;
+  if(!SYS.bridge||!w||w.estado!=='conectado'||PH.open||WA.modo==='avisos') {
+    const h=_vMsgWA();
+    return w&&w.estado==='conectado'&&!PH.open?h.replace('<div class="abody">',`<div class="abody"><div class="wa-tabs" style="margin-bottom:12px"><button class="pill" data-wa="modo" data-m="directo">WhatsApp</button><button class="pill on">Avisos</button></div>`):h;
+  }
+  const parado=waParado();
+  return `${appbar('WhatsApp',`<span class="wa-tabs"><button class="pill on">WhatsApp</button><button class="pill" data-wa="modo" data-m="avisos">Avisos</button></span>`)}
+  <div class="abody wav"><div class="wa-live" id="waLive">${parado?'<img id="waImg" alt="WhatsApp">':`<div class="wa-c"><div>${waIco}<br><b style="color:var(--fg)">Por seguridad, WhatsApp se ve con el coche parado</b><br>Los avisos te siguen llegando arriba.</div></div>`}</div>
+    ${parado?`<div class="wa-esc"><input id="waIn" placeholder="Escribe aquí y pulsa Enviar (abre antes el chat)" enterkeyhint="send" autocomplete="off"><button class="pill on" data-wa="enviar">Enviar</button></div>`:''}</div>`;
+};
+/* Tras pintar: arranca el vídeo con el tamaño exacto del hueco */
+const _renderAppWA=renderApp; renderApp=function(...a){ const r=_renderAppWA(...a); waVideo(); return r; };
+function waVideo(){
+  const img=$('waImg'); if(!img||img.dataset.on) return; img.dataset.on='1';
+  requestAnimationFrame(()=>{ const b=$('waLive').getBoundingClientRect(); WA.tam=[Math.round(b.width),Math.round(b.height)];
+    img.src='/api/whatsapp/pantalla?w='+WA.tam[0]+'&h='+WA.tam[1]+'&t='+Date.now(); waEventos(img); });
+}
+const waIn=d=>fetch('/api/whatsapp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'entrada',...d})}).then(r=>r.json()).catch(()=>({ok:false}));
+function waEventos(img){
+  const xy=e=>{ const b=img.getBoundingClientRect(); return {x:(e.clientX-b.left)*(WA.tam[0]/b.width),y:(e.clientY-b.top)*(WA.tam[1]/b.height)}; };
+  let ini=null, ult=null, acc=0, tm=0;
+  img.addEventListener('pointerdown',e=>{ e.preventDefault(); ini=ult={x:e.clientX,y:e.clientY,p:xy(e)}; acc=0; try{ img.setPointerCapture(e.pointerId); }catch(x){} });
+  img.addEventListener('pointermove',e=>{ if(!ini) return; const dy=ult.y-e.clientY; ult={x:e.clientX,y:e.clientY,p:ult.p}; acc+=dy;
+    if(Math.abs(e.clientY-ini.y)>12&&!tm){ tm=setTimeout(()=>{ tm=0; if(acc){ waIn({t:'rueda',x:ini.p.x,y:ini.p.y,dy:acc*1.6}); acc=0; } },60); } });
+  img.addEventListener('pointerup',e=>{ if(!ini) return; const mov=Math.hypot(e.clientX-ini.x,e.clientY-ini.y); if(mov<12) waIn({t:'toque',...ini.p}); else if(acc) waIn({t:'rueda',x:ini.p.x,y:ini.p.y,dy:acc*1.6}); ini=null; });
+  img.addEventListener('wheel',e=>{ e.preventDefault(); const p=xy(e); waIn({t:'rueda',x:p.x,y:p.y,dy:e.deltaY}); },{passive:false});
+  img.addEventListener('error',()=>{ setTimeout(()=>{ if($('waImg')===img){ img.dataset.on=''; img.removeAttribute('src'); waVideo(); } },3000); });
+}
+/* Teclado del Raspberry: si no estás en un campo, las teclas van a WhatsApp */
+document.addEventListener('keydown',e=>{
+  if(!$('waImg')||S.view!=='mensajes'||(e.target&&/INPUT|TEXTAREA/.test(e.target.tagName))||e.ctrlKey||e.altKey||e.metaKey) return;
+  if(e.key.length===1){ e.preventDefault(); waIn({t:'texto',v:e.key}); }
+  else if(['Enter','Backspace','Escape','Tab','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Delete'].includes(e.key)){ e.preventDefault(); waIn({t:'tecla',k:e.key}); }
+});
+async function waEnviar(){ const i=$('waIn'); if(!i) return; const v=i.value.trim(); if(!v) return;
+  if(!waParado()) return toast('Para el coche para escribir');
+  const r=await waIn({t:'enviar',v}); if(r.ok){ i.value=''; } else toast(r.error||'No se pudo enviar'); }
+document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.target&&e.target.id==='waIn'){ e.preventDefault(); waEnviar(); } });
+document.addEventListener('click',e=>{ const el=e.target.closest('[data-wa="enviar"],[data-wa="modo"]'); if(!el) return; e.stopPropagation();
+  if(el.dataset.wa==='enviar') return waEnviar();
+  WA.modo=el.dataset.m; LS.set('rp-wa-modo',WA.modo); renderApp(); },true);
+/* Si arrancas, se corta el vídeo; al parar, vuelve */
+let waParAntes=null; setInterval(()=>{ const p=waParado(); if(p!==waParAntes){ const cambio=waParAntes!==null; waParAntes=p; if(cambio&&S.view==='mensajes'&&!PH.open&&!(document.activeElement&&document.activeElement.id==='waIn')) renderApp(); } },1500);
