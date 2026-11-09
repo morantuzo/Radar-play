@@ -44,6 +44,10 @@ async function waPoll(){
   else if(S.view==='mensajes'&&antes!==JSON.stringify([d.suscrito,d.msg])) renderApp();
 }
 setInterval(waPoll,2000); setTimeout(waPoll,1500);
+/* Estado de WhatsApp Web en la Raspberry (QR / conectado) */
+async function waWebPoll(){ if(!SYS.bridge) return; try{ const d=await (await fetch('/api/whatsapp',{cache:'no-store'})).json();
+  const antes=WA.web&&WA.web.estado; WA.web=d; if(S.view==='mensajes'&&antes!==d.estado&&!$('waQR')) renderApp(); waQRPintar(); }catch(e){} }
+setInterval(waWebPoll,3000); setTimeout(waWebPoll,1000);
 
 /* No se puede contestar todavía: Siri «dile a…» avisa en vez de inventar un envío */
 phSend=function(name){ toast('Por ahora Radar Play solo enseña los WhatsApp. Contesta desde el iPhone.'); };
@@ -51,8 +55,10 @@ shareTo=function(){ closeOv(); toast('Por ahora no se pueden mandar mensajes des
 replyTo=function(name){ toast('Por ahora Radar Play solo enseña los WhatsApp. Contesta desde el iPhone.'); };
 
 function waEstado(){
-  const d=WA.st;
-  if(!SYS.bridge) return {ok:false,html:'Abre Radar Play en la Raspberry con tu iPhone cerca para ver tus WhatsApp.'};
+  const d=WA.st, w=WA.web;
+  if(!SYS.bridge) return {ok:false,html:'Abre Radar Play en la Raspberry para ver tus WhatsApp.'};
+  if(w&&w.estado==='conectado') return {ok:true,html:'WhatsApp conectado'};
+  if(w&&w.estado&&w.estado!=='apagado') return {ok:false,html:esc(w.estado==='qr'?'Pulsa «Conectar WhatsApp» y escanea el código con tu iPhone':w.msg||'')};
   if(!d||!d.disponible) return {ok:false,html:'El Bluetooth de la Raspberry no está listo.'};
   if(d.suscrito) return {ok:true,html:'Recibiendo los WhatsApp de '+esc(d.iphone||'tu iPhone')};
   return {ok:false,html:esc(d.msg||'Esperando al iPhone')};
@@ -70,9 +76,32 @@ VIEWS.mensajes=()=>{
     <div class="list">${names.length?names.map(n=>{ const t=PH.threads[n], l=t.m.slice(-1)[0];
       return `<button class="row" data-ph="open" data-n="${esc(n)}"><span class="av" style="background:#128c4a">${esc(n[0]||'?')}</span><span class="t"><b>${t.unread?'<i class="dot"></i>':''}${esc(n)}</b><small>${l?esc(((l.sub&&l.sub!==n)?l.sub+': ':'')+(waParado()?l.x:'Mensaje')):''}</small></span><span class="muted">${l?hm(l.t):''}</span></button>`; }).join('')
       :`<p class="muted">${st.ok?'Aún no ha llegado ningún WhatsApp desde que conectaste.':'Cuando conectes el iPhone, aquí saldrán los WhatsApp que te lleguen.'}</p>`}</div>
-    ${names.length?'<div style="margin-top:12px"><button class="pill" data-wa="limpiar">Borrar la lista</button></div>':''}</div>`;
+    <div style="margin-top:12px;display:flex;gap:8px">${names.length?'<button class="pill" data-wa="limpiar">Borrar la lista</button>':''}${WA.web&&WA.web.estado==='conectado'?'<button class="pill" data-wa="salir">Desvincular WhatsApp</button>':''}</div></div>`;
 };
 function waConectar(){
+  const w=WA.web;
+  if(!w||w.estado==='apagado'){ api('/api/avisos',{accion:'activar'}).catch(()=>{}); return waConectarBT(); }
+  overlay(`<h2>${waIco} Conectar WhatsApp</h2>
+    <div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap">
+      <div id="waQR" style="width:300px;height:300px;background:#fff;border-radius:14px;display:grid;place-items:center;color:#333;flex:none">Cargando…</div>
+      <ol style="line-height:1.7;margin:0;padding-left:20px;flex:1;min-width:260px">
+        <li>En el iPhone abre <b>WhatsApp</b>.</li>
+        <li>Ve a <b>Ajustes › Dispositivos vinculados</b>.</li>
+        <li>Pulsa <b>Vincular un dispositivo</b> y apunta al código.</li>
+      </ol></div>
+    <p class="muted" id="waSt" style="margin-top:12px"></p>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button class="pill" data-wa="reiniciar">Recargar</button><button class="pill on" id="cOv">Cerrar</button></div>`);
+  $('cOv').onclick=closeOv; waQRPintar(); waWebPoll();
+}
+function waQRPintar(){
+  const box=$('waQR'), st=$('waSt'), w=WA.web||{}; if(!box) return;
+  if(w.estado==='conectado'){ closeOv(); toast('WhatsApp conectado. Tus mensajes saldrán aquí'); if(S.view==='mensajes') renderApp(); return; }
+  if(w.qr){ if(box.dataset.qr!==w.qr.slice(-40)){ box.innerHTML=`<img src="${w.qr}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated" alt="Código QR de WhatsApp">`; box.dataset.qr=w.qr.slice(-40); } }
+  else box.textContent=w.estado==='error'?'No carga':'Cargando…';
+  if(st) st.textContent=w.estado==='qr'?'El código cambia cada poco: escanéalo cuando salga.':(w.msg||'');
+}
+function waConectarBT(){
+
   api('/api/avisos',{accion:'activar'}).catch(()=>{});
   overlay(`<h2>${waIco} Ver tus WhatsApp en Radar Play</h2>
     <p>El iPhone tiene que estar ya emparejado con «Radar Play» por Bluetooth (Sistema › iPhone por Bluetooth).</p>
@@ -90,5 +119,7 @@ function waConectar(){
 }
 document.addEventListener('click',e=>{ const el=e.target.closest('[data-wa]'); if(!el) return; e.stopPropagation();
   if(el.dataset.wa==='activar') waConectar();
+  if(el.dataset.wa==='reiniciar'){ api('/api/whatsapp',{accion:'reiniciar'}).catch(()=>{}); toast('Recargando WhatsApp…'); }
+  if(el.dataset.wa==='salir') confirmBox('¿Desvincular WhatsApp de Radar Play?','Dejarán de llegar los avisos hasta que vuelvas a escanear el código.','Desvincular',()=>api('/api/whatsapp',{accion:'cerrar_sesion'}).then(()=>{ toast('WhatsApp desvinculado'); }));
   if(el.dataset.wa==='limpiar') confirmBox('¿Borrar la lista?','Solo se borra en Radar Play, no en el iPhone.','Borrar',()=>{ PH.threads={}; PH.save(); decorate(); renderApp(); });
 },true);

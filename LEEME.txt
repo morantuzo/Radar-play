@@ -93,13 +93,16 @@ NOVEDADES (noviembre)
   carga con el ID, arranca sin el y lo explica en Ajustes.
 - Siempre en Dynamic (Ajustes). Viene encendido.
 
-WHATSAPP (AVISOS DEL IPHONE)
-- La app Mensajes ahora es WhatsApp: salen los WhatsApp reales del iPhone
-  con el nombre de la persona o grupo. Solo se ven, no se contesta.
-- Para activarlo: WhatsApp > Conectar WhatsApp. En el iPhone: Ajustes >
-  Bluetooth > (i) junto a Radar Play > "Compartir notificaciones del
-  sistema" (y Permitir si lo pregunta).
+WHATSAPP
+- La app Mensajes ahora es WhatsApp: salen tus WhatsApp reales con el nombre
+  de la persona o grupo. Solo se ven, no se contesta (por ahora).
+- Vienen de WhatsApp Web, abierto en segundo plano en la Raspberry. La
+  primera vez: WhatsApp > Conectar WhatsApp y escanea el QR con el iPhone
+  (WhatsApp > Ajustes > Dispositivos vinculados > Vincular un dispositivo).
+- Necesita internet en el coche (compartir datos del iPhone, por ejemplo).
 - En marcha se ve quien escribe; el texto, solo parado (o pulsa Leer).
+- Alternativa sin internet: AVISOS_BT=1 y WHATSAPP_WEB=0 en el conf
+  (avisos del iPhone por Bluetooth).
 
 CLAVE DE GOOGLE SIN ESCRIBIRLA
 - En el mando del iPhone: "Clave de Google y actualizar". Pega la clave

@@ -35,8 +35,8 @@ import sistema_rp as SIS
 import registro as LOG
 LOG.iniciar(SIS.cargar_conf().get("LOG_NIVEL", "info"))
 import coche as COCHE
-import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG
-MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, LOG]
+import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW
+MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, LOG]
 NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes")    # muy frecuentes o grandes
 _c = SIS.cargar_conf()
 if os.path.exists(SIS.CONF_FILE):
