@@ -464,19 +464,64 @@ def cerrar_chromium():
     _int["ws"] = None
 
 
+# Encendido o apagado desde la pantalla (manda sobre radar-play.conf). Por defecto, apagado: carga mucho la Pi 400
+ARCH_MODO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datos", "whatsapp-web.json")
+
+
+def activado():
+    try:
+        return bool(json.load(open(ARCH_MODO)).get("on"))
+    except Exception:
+        return False
+
+
+def _hilo_on():
+    if _int.get("hilo") and _int["hilo"].is_alive():
+        return
+    _int["parar"] = False
+    _int["hilo"] = threading.Thread(target=_hilo, daemon=True, name="whatsapp-web")
+    _int["hilo"].start()
+
+
+def encender(on):
+    os.makedirs(os.path.dirname(ARCH_MODO), exist_ok=True)
+    json.dump({"on": bool(on)}, open(ARCH_MODO, "w"))
+    _avisos_bt(not on)
+    if on and _int["sis"] and _int["sis"].ES_PI:
+        _hilo_on()
+        LOG.info("WhatsApp Web encendido", origen="whatsapp")
+    else:
+        _int["parar"] = True
+        cerrar_chromium()
+        estado.update(estado="apagado", msg="Apagado (más ligero: avisos por Bluetooth)")
+        LOG.info("WhatsApp Web apagado", origen="whatsapp")
+    return {"ok": True}
+
+
+def _avisos_bt(on):
+    try:
+        import ancs
+        ancs.estado["pausado"] = not on
+    except Exception:
+        pass
+
+
 def arrancar(sis, obd=None):
     _int["sis"] = sis
-    if not int(sis.CONF.get("WHATSAPP_WEB", 1)):
-        estado.update(estado="apagado", msg="Desactivado (WHATSAPP_WEB=0)")
+    on = activado()
+    _avisos_bt(not on)
+    if not on:
+        estado.update(estado="apagado", msg="Apagado (más ligero: avisos por Bluetooth)")
+        subprocess.call(["pkill", "-f", PERFIL], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # el de una versión anterior
         return
     if not sis.ES_PI:
         estado.update(estado="apagado", msg="WhatsApp Web funciona en la Raspberry")
         return
-    threading.Thread(target=_hilo, daemon=True, name="whatsapp-web").start()
+    _hilo_on()
 
 
 def g_wa(q):
-    return {**estado, "qr": _int["qr"] if estado["estado"] == "qr" else None}
+    return {**estado, "qr": _int["qr"] if estado["estado"] == "qr" else None, "activado": activado()}
 
 
 def _evaluar(cdp, js):
@@ -545,6 +590,8 @@ def g_chat(q):
 
 def p_wa(d):
     a = d.get("accion")
+    if a == "encender":
+        return encender(bool(d.get("on")))
     if a == "entrada":
         return entrada(d)
     if a == "abrir":

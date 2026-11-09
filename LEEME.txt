@@ -103,7 +103,11 @@ WHATSAPP
   llamo en cuanto pare"...). Tocas una y se envia. En la lista de chats:
   "Leer mensajes: Al conducir / Siempre / Nunca".
 - La voz sale por los altavoces de la Raspberry (Piper; si no, espeak-ng).
-- Vienen de WhatsApp Web, abierto en segundo plano en la Raspberry. La
+- POR DEFECTO, MODO LIGERO: los avisos llegan del iPhone por Bluetooth
+  (WhatsApp > Conectar WhatsApp), se leen en voz alta, sin contestar.
+- Opcional (WhatsApp > Usar WhatsApp Web): chats y contestar. Carga mucho
+  la Pi 400; mejor con una Pi 5.
+- Con WhatsApp Web: vienen de WhatsApp Web, abierto en segundo plano. La
   primera vez: WhatsApp > Conectar WhatsApp y escanea el QR con el iPhone
   (WhatsApp > Ajustes > Dispositivos vinculados > Vincular un dispositivo).
 - Necesita internet en el coche (compartir datos del iPhone, por ejemplo).

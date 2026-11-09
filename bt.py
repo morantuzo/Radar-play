@@ -372,7 +372,7 @@ def hilo():
     _loop.update(ok=True, ejecutar=ejecutar)
     try:
         import ancs
-        if _conf.get("AVISOS_BT"):                       # avisos por Bluetooth (si no, vienen de WhatsApp Web)
+        if _conf.get("AVISOS_BT", 1):                    # avisos de WhatsApp por Bluetooth (ligero); se pausan si usas WhatsApp Web
             ancs.iniciar(_bus, dbus, GLib, _prop, adaptador)
     except Exception as e:
         LOG.aviso("Avisos del iPhone no disponibles: %s", e, origen="avisos")
@@ -508,7 +508,7 @@ _conf = {}
 
 
 def arrancar(sis, obd=None):
-    _conf["AVISOS_BT"] = int(sis.CONF.get("AVISOS_BT", 0))
+    _conf["AVISOS_BT"] = 1                                # siempre: ancs se pausa solo si WhatsApp Web está encendido
     _cargar_contactos()
     if not int(sis.CONF.get("BLUETOOTH", 1)):
         estado["msg"] = "Desactivado (BLUETOOTH=0)"

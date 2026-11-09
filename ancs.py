@@ -22,7 +22,7 @@ ANUNCIO = "/radarplay/anuncio"
 # Lo que se pide de cada aviso: app, título (persona o grupo), subtítulo y mensaje
 ATRIBUTOS = [(0, None), (1, 80), (2, 80), (3, 300)]
 
-estado = {"anunciando": False, "conectado": False, "iphone": None, "msg": "Esperando al iPhone", "suscrito": False,
+estado = {"pausado": False, "anunciando": False, "conectado": False, "iphone": None, "msg": "Esperando al iPhone", "suscrito": False,
           "ultimo": None, "n_avisos": 0}
 eventos = deque(maxlen=300)            # {n, tipo: nuevo|quitar, id, app, titulo, sub, texto, t, previo}
 _seq = {"n": 0}
@@ -115,7 +115,7 @@ def iniciar(bus, dbus, GLib, prop, adaptador):
             i += 3 + largo
         _int.update(buf=b"", pidiendo=None)
         app = at.get(0, "")
-        if app in APPS:
+        if app in APPS and not estado.get("pausado"):          # pausado: los avisos vienen de WhatsApp Web
             previo = uid in _int["previos"]
             titulo, sub, texto = at.get(1, "").strip(), at.get(2, "").strip(), at.get(3, "").strip()
             _int["apps"][uid] = APPS[app]
