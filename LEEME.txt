@@ -93,6 +93,14 @@ NOVEDADES (noviembre)
   carga con el ID, arranca sin el y lo explica en Ajustes.
 - Siempre en Dynamic (Ajustes). Viene encendido.
 
+WHATSAPP (AVISOS DEL IPHONE)
+- La app Mensajes ahora es WhatsApp: salen los WhatsApp reales del iPhone
+  con el nombre de la persona o grupo. Solo se ven, no se contesta.
+- Para activarlo: WhatsApp > Conectar WhatsApp. En el iPhone: Ajustes >
+  Bluetooth > (i) junto a Radar Play > "Compartir notificaciones del
+  sistema" (y Permitir si lo pregunta).
+- En marcha se ve quien escribe; el texto, solo parado (o pulsa Leer).
+
 CLAVE DE GOOGLE SIN ESCRIBIRLA
 - En el mando del iPhone: "Clave de Google y actualizar". Pega la clave
   (AIza...) y el ID de mapa y pulsa "Enviar al coche y comprobar". La

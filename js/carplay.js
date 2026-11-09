@@ -17,7 +17,7 @@ APPS.splice(APPS.findIndex(a=>a.id==='destinos'),0,{id:'calendario',name:'Calend
 const PH={
   contacts:ld('rp-contactos',[{n:'Mamá',t:'600 111 222',fav:1},{n:'Alejandra',t:'600 333 444',fav:1},{n:'Taller Ruiz',t:'916 000 111'},{n:'Cochera',t:'916 000 222'},{n:'Trabajo',t:'916 000 333'}]),
   calls:ld('rp-llamadas',[{n:'Taller Ruiz',dir:'in',t:Date.now()-3*3600e3,dur:95},{n:'Mamá',dir:'out',t:Date.now()-26*3600e3,dur:310},{n:'Alejandra',dir:'miss',t:Date.now()-28*3600e3,dur:0}]),
-  threads:ld('rp-msgs',{'Alejandra':{unread:1,m:[{me:0,x:'¿A qué hora llegas?',t:Date.now()-50*60e3}]},'Taller Ruiz':{unread:0,m:[{me:0,x:'Ya tienes el coche listo',t:Date.now()-5*3600e3}]}}),
+  threads:ld('rp-msgs',{}),
   dnd:LS.get('rp-dnd')==='1', events:LS.get('rp-eventos')!=='0', tab:'fav', open:null, dial:'', call:null, ring:null, resume:false, lastAuto:{},
   save(){ LS.set('rp-contactos',JSON.stringify(this.contacts)); LS.set('rp-llamadas',JSON.stringify(this.calls.slice(0,40))); LS.set('rp-msgs',JSON.stringify(this.threads)); },
   find(q){ const n=nrm(q).replace(/^(a|al|la|el)\s+/,''); if(!n) return null; return this.contacts.find(c=>nrm(c.n)===n)||this.contacts.find(c=>nrm(c.n).startsWith(n)||n.startsWith(nrm(c.n)))||this.contacts.find(c=>nrm(c.n).includes(n)); },
@@ -87,7 +87,7 @@ const DEMO_MSG={'Alejandra':['¿Te falta mucho?','Compra pan cuando vengas','¿C
 setInterval(()=>{
   if(!PH.events||!S.sim||!NAV.active||PH.call||Math.random()>.12) return;
   const names=Object.keys(DEMO_MSG), n=names[Math.floor(Math.random()*names.length)];
-  if(Math.random()<.78){ const l=DEMO_MSG[n]; phIncomingMsg(n,l[Math.floor(Math.random()*l.length)]); } else phIncoming(n);
+  if(Math.random()<.3) phIncoming(n);             // solo llamadas: los mensajes son los WhatsApp reales del iPhone
 },20000);
 
 /* ---------- Compartir hora de llegada ---------- */
@@ -126,7 +126,7 @@ VIEWS.mensajes=()=>{
   return `${appbar('Mensajes',iphoneTag)}<div class="abody"><div class="list">${names.map(n=>{ const t=PH.threads[n], l=t.m.slice(-1)[0];
       return `<button class="row" data-ph="open" data-n="${esc(n)}"><span class="av">${esc(n[0])}</span><span class="t"><b>${t.unread?'<i class="dot"></i>':''}${esc(n)}</b><small>${l?esc((l.me?'Tú: ':'')+l.x):''}</small></span><span class="muted">${l?hm(l.t):''}</span></button>`; }).join('')}</div>
     <p class="note" style="margin-top:14px">Mientras conduces, CarPlay no muestra el texto: Siri lo lee y tú respondes dictando. Prueba: «Lee mis mensajes» o «Dile a Alejandra que llego en diez minutos».</p>
-    <div style="margin-top:12px"><button class="pill" data-ph="demo-msg">Simular mensaje nuevo</button></div></div>`;
+    </div>`;
 };
 VIEWS.calendario=()=>`${appbar('Calendario','<span class="pill">Hoy</span>')}<div class="abody"><div class="list">${CAL.map(e=>`<div class="row"><span class="num" style="width:64px;font-weight:800;font-size:18px">${e.h}</span><span class="t"><b>${esc(e.title)}</b><small>${esc(e.place)}</small></span><button class="pill on" data-nav="go-q" data-q="${esc(e.place)}" data-n="${esc(e.title)}">Ir</button></div>`).join('')}</div>
   <p class="note" style="margin-top:14px">Como en CarPlay, cada cita con dirección se puede abrir en Mapas. Con el iPhone real conectado saldrían tus citas.</p></div>`;
@@ -147,7 +147,7 @@ VIEWS.ajustes=()=>`${appbar('Ajustes')}<div class="abody">
   <div class="set"><div><b>Tus avisos guardados</b><div class="muted">${NAV.setts.reports.length} aviso${NAV.setts.reports.length===1?'':'s'} notificado${NAV.setts.reports.length===1?'':'s'} desde este coche</div></div><button class="pill" id="bClrRep">Borrar</button></div>
   <h3 class="sh">iPhone</h3>
   ${togRow('tDnd',PH.dnd,'No molestar al conducir','Silencia los mensajes, responde automáticamente y solo deja pasar llamadas de favoritos')}
-  ${togRow('tEvt',PH.events,'Simular llamadas y mensajes en el viaje','Llegan de vez en cuando mientras simulas un viaje')}
+  ${togRow('tEvt',PH.events,'Simular llamadas en el viaje','Llegan de vez en cuando mientras simulas un viaje (los mensajes son siempre los reales)')}
   <div class="set" style="align-items:flex-start"><div><b>Contactos</b><div class="muted">Uno por línea: Nombre; teléfono. Pon * delante para favorito.</div></div><span style="display:flex;flex-direction:column;gap:8px;align-items:flex-end"><textarea id="iCon" rows="5">${esc(PH.contacts.map(c=>(c.fav?'*':'')+c.n+'; '+(c.t||'')).join('\n'))}</textarea><button class="pill on" id="bCon">Guardar</button></span></div>
   <div class="set" style="align-items:flex-start"><div><b>Mando desde tu iPhone</b><div class="muted" id="mandoInfo">${mandoText()}</div></div><div id="qr" class="qrbox"></div></div>
   <h3 class="sh">Sistema</h3>
@@ -223,10 +223,10 @@ async function siriHandle(text){
   if(/(cuanto falta|cuanto queda|a que hora llego|hora de llegada|cuando llego)/.test(n)) return R(NAV.active?`${etaPhrase()} Quedan ${sayDist(NAV.r.len-NAV.along)}, unos ${fmtMin(remainingSecs())}.`:'No hay ninguna ruta activa.');
   if(/(como esta el trafico|hay trafico|trafico)/.test(n)&&NAV.active){ const j=NAV.alerts.filter(x=>x.type==='atasco'&&!x.done&&x.d1>NAV.along);
     return R(j.length?`Hay ${j.length} retención${j.length>1?'es':''} en tu ruta. La primera a ${sayDist(j[0].d-NAV.along)}.`:'El tráfico es fluido en tu ruta.'); }
-  if((m=n.match(/(?:comparte|compartir|envia|manda)\s+(?:mi\s+)?(?:hora de\s+)?llegada\s+(?:con|a)\s+(.+)$/))){ const c=PH.find(m[1]); if(!c) return R('No encuentro a '+m[1]+' en tus contactos.'); if(!NAV.active) return R('Primero inicia una ruta.'); shareScreen(); closeOv(); shareTo(c); return R('Hora de llegada compartida con '+c.n+'.'); }
+  if((m=n.match(/(?:comparte|compartir|envia|manda)\s+(?:mi\s+)?(?:hora de\s+)?llegada\s+(?:con|a)\s+(.+)$/))){ const c=PH.find(m[1]); if(!c) return R('No encuentro a '+m[1]+' en tus contactos.'); if(!NAV.active) return R('Primero inicia una ruta.'); return R('Por ahora no puedo mandar mensajes desde el coche.'); }
   if((m=n.match(/^(?:dile|di le)\s+a\s+(.+?)\s+que\s+(.+)$/))||(m=n.match(/^(?:envia|manda|enviale|mandale)\s+(?:un\s+)?mensaje\s+a\s+(.+?)\s+(?:diciendo|que diga|que ponga|que)\s+(.+)$/))){
-    const c=PH.find(m[1]); if(!c) return R('No encuentro a '+m[1]+' en tus contactos.'); const lo=text.toLowerCase(); let msg=m[2]; for(const k of [' diciendo ',' que diga ',' que ponga ',' que ']){ const i=lo.indexOf(k); if(i>=0){ msg=text.slice(i+k.length).replace(/[.!¡¿?]+$/,''); break; } } msg=cap(msg.trim()); phSend(c.n,msg); return R(`Enviado a ${c.n}: ${msg}`); }
-  if((m=n.match(/^(?:envia|manda)\s+(?:un\s+)?mensaje\s+a\s+(.+)$/))){ const c=PH.find(m[1]); if(!c) return R('No encuentro a '+m[1]+'.'); SR.open('dictate',t=>{ phSend(c.n,t); SR.reply('Enviado a '+c.n+'.'); },'¿Qué le digo a '+c.n+'?'); sayQ('¿Qué le digo a '+c.n+'?'); return; }
+    const c=PH.find(m[1]); if(!c) return R('No encuentro a '+m[1]+' en tus contactos.'); const lo=text.toLowerCase(); let msg=m[2]; for(const k of [' diciendo ',' que diga ',' que ponga ',' que ']){ const i=lo.indexOf(k); if(i>=0){ msg=text.slice(i+k.length).replace(/[.!¡¿?]+$/,''); break; } } return R('Por ahora no puedo mandar WhatsApp desde el coche. Contesta desde el iPhone.'); }
+  if((m=n.match(/^(?:envia|manda)\s+(?:un\s+)?mensaje\s+a\s+(.+)$/))){ const c=PH.find(m[1]); if(!c) return R('No encuentro a '+m[1]+'.'); return R('Por ahora no puedo mandar WhatsApp desde el coche. Contesta desde el iPhone.'); }
   if(/(lee|leeme|lee me|leer)\s.*mensajes|mensajes nuevos|tengo mensajes/.test(n)){ const un=Object.entries(PH.threads).filter(([,t])=>t.unread);
     if(!un.length) return R('No tienes mensajes nuevos.'); SR.close(); un.forEach(([nm])=>readThread(nm)); return; }
   if((m=n.match(/^(?:llama|llamar|llamame a|telefonea|marca)\s+(?:a\s+)?(.+)$/))){ const c=PH.find(m[1]); const digits=m[1].replace(/\D/g,'');

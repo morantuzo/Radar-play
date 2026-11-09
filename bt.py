@@ -370,6 +370,11 @@ def hilo():
         return res["r"]
 
     _loop.update(ok=True, ejecutar=ejecutar)
+    try:
+        import ancs
+        ancs.iniciar(_bus, dbus, GLib, _prop, adaptador)
+    except Exception as e:
+        LOG.aviso("Avisos del iPhone no disponibles: %s", e, origen="avisos")
     refrescar()
     GLib.timeout_add(1000, refrescar)
     # Avisa al momento de llamadas nuevas (además del sondeo cada segundo)
@@ -629,3 +634,23 @@ def p_bt(d):
 
 GET = {"/api/bt": g_bt, "/api/bt/contactos": g_contactos}
 POST = {"/api/bt": p_bt}
+
+
+# ===================== Avisos de WhatsApp (ancs.py) =====================
+def g_avisos(q):
+    import ancs
+    desde = int((q.get("desde") or ["0"])[0] or 0)
+    return {"disponible": _loop["ok"], **ancs.estado, "eventos": ancs.lista(desde),
+            "emparejando": time.time() < estado["emparejando_hasta"]}
+
+
+def p_avisos(d):
+    if d.get("accion") == "activar":
+        estado["emparejando_hasta"] = time.time() + 180      # deja emparejar por Bluetooth LE 3 minutos
+        LOG.info("Avisos: ventana para aceptar en el iPhone abierta", origen="avisos")
+        return {"ok": True}
+    return {"ok": False, "error": "Acción desconocida"}
+
+
+GET["/api/avisos"] = g_avisos
+POST["/api/avisos"] = p_avisos
