@@ -37,19 +37,22 @@ function ledsHTML(){
   const l=XT.leds; if(!l) return '';
   return `<h3 class="sh">Luz ambiente</h3>
     <div class="set"><div><b>Tira LED</b><div class="muted">${esc(l.msg)}${l.n?' · '+l.n+' LEDs':''}</div></div>
-      <span class="co-sw" style="min-width:300px"><button class="${l.modo==='dna'?'on':''}" data-lx="modo" data-k="dna">Según DNA</button><button class="${l.modo==='color'?'on':''}" data-lx="modo" data-k="color">Un color</button><button class="${l.modo==='apagado'?'on':''}" data-lx="modo" data-k="apagado">Apagada</button></span></div>
-    <div class="set"><div><b>Color</b><div class="muted">Dynamic rojo · Normal blanco cálido · All Weather azul</div></div><span style="display:flex;gap:6px;flex-wrap:wrap">${LCOL.map(c=>`<button data-lx="color" data-k="${c}" aria-label="Color ${c}" style="width:30px;height:30px;border-radius:50%;background:${c};border:2px solid ${l.color&&'#'+l.color.map(x=>x.toString(16).padStart(2,'0')).join('')===c?'var(--fg)':'transparent'}"></button>`).join('')}</span></div>
+      <span class="co-sw" style="min-width:420px">${[['dna','Según DNA'],['color','Un color'],['respirar','Respirar'],['arcoiris','Arcoíris'],['apagado','Apagada']].map(([k,n])=>`<button class="${l.modo===k?'on':''}" data-lx="modo" data-k="${k}">${n}</button>`).join('')}</span></div>
+    <div class="set"><div><b>Color</b><div class="muted">Dynamic rojo · Normal blanco cálido · All Weather azul</div></div><span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center"><input type="color" id="lxC" value="${l.color?'#'+l.color.map(x=>x.toString(16).padStart(2,'0')).join(''):'#ff2020'}" aria-label="Elegir cualquier color" style="width:38px;height:32px;border:0;background:none;padding:0">${LCOL.map(c=>`<button data-lx="color" data-k="${c}" aria-label="Color ${c}" style="width:30px;height:30px;border-radius:50%;background:${c};border:2px solid ${l.color&&'#'+l.color.map(x=>x.toString(16).padStart(2,'0')).join('')===c?'var(--fg)':'transparent'}"></button>`).join('')}</span></div>
     <div class="set"><div><b>Brillo</b><div class="muted">${l.brillo} %</div></div><input type="range" id="lxB" min="5" max="100" value="${l.brillo}" style="width:240px"></div>
     ${lxBtHTML(l.bt||{})}`;
 }
 /* Tiras USB que se manejan con una app del móvil: van por Bluetooth */
 function lxBtHTML(b){
   const lista=(b.encontradas||[]).map(x=>`<div class="set"><div><b>${esc(x.nombre)}</b><div class="muted">${esc(x.mac)}${x.rssi?' · señal '+x.rssi+' dBm':''}</div></div><button class="pill on" data-lxbt="usar" data-mac="${esc(x.mac)}" data-n="${esc(x.nombre)}">Usar esta</button></div>`).join('');
-  return `<div class="set"><div><b>Tira USB por Bluetooth</b><div class="muted">${b.mac?(b.conectado?'✓ ':'')+esc(b.msg||b.nombre||b.mac):'Si tu tira tiene app en el móvil (duoCo, Lotus Lamp, Happy Lighting…), cierra esa app y pulsa Buscar'}</div></div>
+  const otros=(b.otros||[]).length&&!b.mac?`<details style="margin:4px 0 8px"><summary class="muted" style="cursor:pointer">¿No sale la tuya? Ver todos los aparatos Bluetooth (${b.otros.length})</summary>${b.otros.map(x=>`<div class="set"><div><b>${esc(x.nombre)}</b><div class="muted">${esc(x.mac)}</div></div><button class="pill" data-lxbt="usar" data-mac="${esc(x.mac)}" data-n="${esc(x.nombre)}">Probar esta</button></div>`).join('')}</details>`:'';
+  const ajuste=b.mac&&b.conectado?`<div class="set"><div><b>¿Salen los colores cambiados?</b><div class="muted">Orden actual: ${esc((b.orden||'rgb').toUpperCase())}. Tu controlador pone G R B: si pides rojo y sale otro color, ajústalo aquí</div></div><button class="pill" data-lxbt="asistente">Ajustar colores</button></div>`:'';
+  return ajuste+otros+`<div class="set"><div><b>Tira USB por Bluetooth</b><div class="muted">${b.mac?(b.conectado?'✓ ':'')+esc(b.msg||b.nombre||b.mac):'Si tu tira tiene app en el móvil (duoCo, Lotus Lamp, Happy Lighting…), cierra esa app y pulsa Buscar'}</div></div>
     <span style="display:flex;gap:8px">${b.mac?'<button class="pill" data-lxbt="olvidar">Olvidar</button>':''}<button class="pill ${b.mac?'':'on'}" data-lxbt="buscar">${b.buscando?'Buscando…':'Buscar'}</button></span></div>${lista}`;
 }
 document.addEventListener('click',async e=>{
   const el=e.target.closest('[data-lxbt]'); if(!el) return; e.stopPropagation(); const a=el.dataset.lxbt;
+  if(a==='asistente') return lxAsistente();
   const r=await api('/api/leds',a==='usar'?{accion:'bt_usar',mac:el.dataset.mac,nombre:el.dataset.n}:{accion:'bt_'+a}).catch(()=>({ok:false,error:'Sin respuesta'}));
   if(!r.ok) return toast(r.error); if(a==='buscar') toast('Buscando tiras LED durante 8 segundos…');
   const rep=async n=>{ await xtLoad(); if(S.view==='ajustes') renderApp(); if(n>0&&XT.leds&&XT.leds.bt&&(XT.leds.bt.buscando||(XT.leds.bt.mac&&!XT.leds.bt.conectado))) setTimeout(()=>rep(n-1),2000); };
@@ -121,3 +124,22 @@ document.addEventListener('click',async e=>{
 },true);
 const _xtLoad=xtLoad; xtLoad=async function(){ await _xtLoad(); try{ XT.log=await api('/api/log?n=1'); }catch(e){} };
 const _vSis5=VIEWS.sistema; VIEWS.sistema=()=>{ const s=_vSis5(); return SYS.bridge?s.replace('<h3 class="sh">Pantalla y sonido</h3>',logHTML()+'<h3 class="sh">Pantalla y sonido</h3>'):s; };
+
+/* Cualquier color con el selector */
+document.addEventListener('change',e=>{ if(e.target&&e.target.id==='lxC') api('/api/leds',{color:e.target.value}).then(()=>xtLoad()).then(()=>{ if(S.view==='ajustes') renderApp(); }); });
+/* Asistente: enciende cada canal por separado y preguntas qué color ves */
+async function lxAsistente(){
+  const visto=[];
+  const paso=async n=>{
+    await api('/api/leds',{accion:'bt_prueba',canal:n});
+    const ops=['r','g','b'].filter(c=>!visto.includes(c));
+    if(ops.length===1){ visto.push(ops[0]); return fin(); }
+    overlay(`<h2>Ajustar colores · paso ${n} de 2</h2><p>Mira la tira. ¿De qué color está ahora?</p>
+      <div style="display:flex;gap:10px;margin-top:10px">${ops.map(c=>`<button class="pill" data-lxa="${c}" style="flex:1;padding:18px;font-size:18px;background:${{r:'#d32f2f',g:'#2e7d32',b:'#1565c0'}[c]};color:#fff">${{r:'Rojo',g:'Verde',b:'Azul'}[c]}</button>`).join('')}</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="pill" id="lxaNo">Cancelar</button></div>`);
+    $('lxaNo').onclick=async()=>{ await api('/api/leds',{accion:'bt_prueba',canal:null}); closeOv(); };
+    document.querySelectorAll('[data-lxa]').forEach(bt=>bt.onclick=()=>{ visto.push(bt.dataset.lxa); paso(n+1); });
+  };
+  const fin=async()=>{ const orden=visto.join(''); await api('/api/leds',{accion:'bt_orden',orden}); closeOv(); toast('Colores ajustados ('+orden.toUpperCase()+'). Prueba a elegir rojo'); await xtLoad(); if(S.view==='ajustes') renderApp(); };
+  paso(1);
+}
