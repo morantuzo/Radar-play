@@ -35,9 +35,9 @@ import sistema_rp as SIS
 import registro as LOG
 LOG.iniciar(SIS.cargar_conf().get("LOG_NIVEL", "info"))
 import coche as COCHE
-import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ, ytm as YTM, arranque as ARR, obd_can as CAN
-MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, YTM, ARR, CAN, LOG]
-NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz", "/api/ytm", "/api/arranque", "/api/can")    # muy frecuentes o grandes
+import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ, ytm as YTM, arranque as ARR, obd_can as CAN, relojes as REL
+MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, YTM, ARR, CAN, REL, LOG]
+NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz", "/api/ytm", "/api/arranque", "/api/can", "/api/relojes")    # muy frecuentes o grandes
 _c = SIS.cargar_conf()
 if os.path.exists(SIS.CONF_FILE):
     PUERTO_WEB = int(_c["PUERTO"])
@@ -207,9 +207,10 @@ def buscar_puertos(serial_mod):
     if PUERTO_OBD != "auto":
         return [PUERTO_OBD]
     from serial.tools import list_ports
-    lista = [p.device for p in list_ports.comports() if p.device != SIS.CONF["GPS_PUERTO"]]
+    lista = [p.device for p in list_ports.comports() if p.device != SIS.CONF["GPS_PUERTO"] and not REL.es_reloj_usb(p)]
+    relojes = set(REL.puertos_reloj())
     for extra in ("/dev/rfcomm0", "/dev/ttyUSB0", "/dev/ttyACM0"):
-        if os.path.exists(extra) and extra not in lista:
+        if os.path.exists(extra) and extra not in lista and extra not in relojes:
             lista.append(extra)
     # primero los que parecen un ELM327 / adaptador USB-serie
     lista.sort(key=lambda d: 0 if re.search(r"USB|ACM|rfcomm|COM", d, re.I) else 1)

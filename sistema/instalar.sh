@@ -108,7 +108,7 @@ fi
 
 # YouTube Music con tu cuenta: ytmusicapi (tus listas) + yt-dlp (el sonido) + Node (lo necesita yt-dlp)
 instala no python3-pip nodejs
-if sudo -u "$U" timeout 600 python3 -m pip install --user --break-system-packages -U -q "yt-dlp[default]" ytmusicapi >/dev/null 2>&1; then
+if sudo -u "$U" timeout 600 python3 -m pip install --user --break-system-packages -U -q "yt-dlp[default]" ytmusicapi esptool mpremote >/dev/null 2>&1; then
   touch "$APP/datos/ytm-actualizado" 2>/dev/null; bien "YouTube Music (ytmusicapi y yt-dlp)"
 else echo "  · ytmusicapi / yt-dlp no instalados ahora: Radar Play lo intentará solo al entrar con tu cuenta"; fi
 

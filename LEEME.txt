@@ -157,6 +157,21 @@ ACTUALIZAR SIN PENDRIVE
   version nueva de la configuracion se deja como radar-play.conf.nuevo.
 - Se guarda la version anterior: Sistema > Actualizar > Volver a ella.
 
+RELOJES REDONDOS DEL SALPICADERO (3 PANTALLAS TIPO SMARTWATCH)
+- Placas: Waveshare ESP32-S3-LCD-1.28 (o la -B, con caja metálica). Cada una
+  va por su cable USB-C a la Raspberry (corriente y datos por el mismo cable).
+- Enseñan turbo, aceite y refrigerante (en Ajustes › Relojes puedes poner
+  otro dato en cada una: rpm, batería, FAP, admisión, carga).
+- Se encienden solas en Dynamic (o «Siempre» / «Apagados»). Al encender, la
+  aguja hace el barrido como un cuadro de verdad. Rojo = zona peligrosa,
+  azul = motor frío. El turbo guarda el máximo 10 segundos.
+- La primera vez: conéctalas, ve a Ajustes › Relojes › «Preparar». Radar Play
+  les instala MicroPython y el reloj (2-3 min por placa, con internet).
+  Si una no responde: mantén BOOT, pulsa RESET, suelta BOOT y repite.
+- «Identificar» pone 1, 2, 3 en cada una para saber cuál es cuál.
+- «Demo» mueve las agujas 25 s sin el coche, para probar en casa.
+- Si el rojo sale azul: Ajustes › Relojes › «Colores cambiados».
+
 YOUTUBE MUSIC CON TU CUENTA (PREMIUM)
 - Abre YT Music en Radar Play y pulsa «Entrar con mi cuenta» (o desde el
   mando del iPhone: Ajustes de Radar Play › YouTube Music). Se abre una
