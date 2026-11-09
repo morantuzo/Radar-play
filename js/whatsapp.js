@@ -26,7 +26,7 @@ function waAviso(e){
   const nombre=e.titulo||'WhatsApp', quien=e.sub&&e.sub!==nombre?e.sub+' · ':'';
   if(PH.dnd){ decorate(); return; }
   notify({title:nombre,sub:'WhatsApp',body:waParado()?(quien+(e.texto||'')).slice(0,160):'Mensaje nuevo · toca «Leer» para oírlo',
-    acts:[['Leer',()=>readThread(nombre)],['Ver',()=>{ if(waEnVivo()){ setView('mensajes'); waAbrir(nombre); } else { PH.open=nombre; setView('mensajes'); } }]]});
+    acts:[['Leer',()=>waDecir(`${nombre} dice: ${e.texto||''}`)],...(waEnVivo()?[['Responder',()=>waHoja(nombre,e.texto||'')]]:[]),['Ver',()=>{ if(waEnVivo()){ setView('mensajes'); waAbrir(nombre); } else { PH.open=nombre; setView('mensajes'); } }]]});
   beep(1320,.08,2);
 }
 async function waPoll(){
@@ -213,3 +213,87 @@ const _setViewWA=setView; setView=function(v,...a){ if(v!=='mensajes'&&WA.abiert
 const _waAvisoOrig=waAviso; waAviso=function(e){ _waAvisoOrig(e); };
 /* Si arrancas o paras, se vuelve a pintar (texto oculto / visible) */
 let waParAntes=null; setInterval(()=>{ const p=waParado(); if(p!==waParAntes){ const cambio=waParAntes!==null; waParAntes=p; if(cambio&&S.view==='mensajes'&&!(document.activeElement&&document.activeElement.id==='waIn')) renderApp(); } },1500);
+
+/* ===================== Voz de la Raspberry (también para el navegador y «Siri») ===================== */
+const VZ={motor:null};
+async function vzCargar(){ if(!SYS.bridge) return; try{ VZ.motor=(await (await fetch('/api/voz',{cache:'no-store'})).json()).motor||''; }catch(e){} }
+setTimeout(vzCargar,2500); setInterval(()=>{ if(VZ.motor===null) vzCargar(); },15000);
+function vzHablar(t,cortar){ if(typeof MU!=='undefined'&&MU.duck) MU.duck(true); api('/api/voz',{texto:t,cortar:!!cortar}).catch(()=>{});
+  clearTimeout(VZ.t); VZ.t=setTimeout(()=>{ if(typeof MU!=='undefined'&&MU.duck) MU.duck(false); },Math.min(20000,1200+String(t).length*75)); }
+{ const _sayQ=sayQ; sayQ=function(t,...a){ if(SYS.bridge&&VZ.motor&&t){ if(S.voice===false) return; return vzHablar(t); } return _sayQ(t,...a); };
+  const _say=say; say=function(t,...a){ if(SYS.bridge&&VZ.motor&&t){ if(S.voice===false) return; return vzHablar(t,true); } return _say(t,...a); }; }
+
+/* ===================== Leer los WhatsApp y respuestas rápidas con sentido ===================== */
+const waLeerModo=()=>LS.get('rp-wa-leer')||'conducir';          // conducir | siempre | nunca
+const WA_LEER_TXT={conducir:'Al conducir',siempre:'Siempre',nunca:'Nunca'};
+function waDecir(t){ if(SYS.bridge&&VZ.motor) vzHablar(t); else if(typeof _waVozNavegador==='function') _waVozNavegador(t); }
+const _waVozNavegador=t=>{ try{ const u=new SpeechSynthesisUtterance(t); u.lang='es-ES'; speechSynthesis.speak(u); }catch(e){} };
+const sinTilde=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+/* Propone 3-4 respuestas que encajan con lo que te han escrito */
+function waSugerir(texto){
+  const t=sinTilde(texto), out=[], add=(...x)=>x.forEach(v=>{ if(v&&!out.includes(v)) out.push(v); });
+  const nav=typeof NAV!=='undefined'&&NAV.active&&NAV.dest, seg=nav?remainingSecs():0;
+  const llego=nav?(seg<90?'Estoy llegando':'Llego en '+fmtMin(seg)):null, hora=nav?'Llego sobre las '+fmtHM(new Date(Date.now()+seg*1000)):null;
+  if(/^📷|^🎬|^sticker/i.test(texto)) add('Lo veo cuando pare','Voy conduciendo, luego lo miro');
+  if(/^🎤/.test(texto)) add('Voy conduciendo, lo escucho al llegar','Escríbemelo, que no puedo escucharlo');
+  if(/(urgente|emergencia|ayuda|hospital|accidente|corre|llamame ya)/.test(t)) add('Paro y te llamo ahora mismo','¿Qué pasa? Te llamo en cuanto pare');
+  if(/(a que hora|cuando (llegas|vienes|sales|estas)|te falta|cuanto (tardas|te queda|falta|te falta)|llegas|vienes ya|estas llegando|tardas)/.test(t))
+    add(hora||'Voy de camino, llego en un rato',llego||'Salgo ahora mismo',nav?'Voy de camino':'Llego en 15 minutos');
+  if(/(donde estas|por donde vas|donde andas)/.test(t)) add(nav?'Voy de camino a '+NAV.dest.name:'Estoy conduciendo',llego,'Te escribo al llegar');
+  if(/(llamame|me llamas|puedes hablar|te llamo|hablamos)/.test(t)) add('Te llamo en cuanto pare','Ahora no puedo, voy conduciendo','Vale, luego hablamos');
+  if(/(compra|trae|coge|recoge|pasa por|traeme|comprame)/.test(t)) add('Vale, lo cojo','Hecho 👍','Hoy no puedo, lo siento');
+  if(/(te quiero|te amo|un beso|besos|te echo de menos)/.test(t)) add('Yo también te quiero ❤️','Un beso 😘','Y yo a ti');
+  if(/(gracias|muchas gracias)/.test(t)) add('¡De nada!','A ti 😊');
+  if(/(perdon|lo siento|disculpa)/.test(t)) add('No pasa nada','Tranquilo/a, todo bien');
+  if(/(felicidades|feliz cumple|enhorabuena)/.test(t)) add('¡Muchas gracias! 😊','Gracias, luego te escribo');
+  if(/^(hola|buenas|buenos dias|buenas tardes|buenas noches|que tal|hey|ey)\b/.test(t)) add('¡Hola! Voy conduciendo, te escribo luego','Buenas, ahora no puedo');
+  if(/^(vale|ok|okey|perfecto|genial|de acuerdo|listo|guay)\b/.test(t)) add('👍','Perfecto');
+  const pregunta=/\?|^¿/.test(texto)||/^(puedes|vienes|quieres|vas|te parece|estas|tienes|has|sabes|podemos|nos vemos|quedamos)\b/.test(t);
+  if(!out.length&&pregunta) add('Sí','No','Luego te digo, voy conduciendo');          // pregunta de sí o no
+  if(!out.length) add('Vale, perfecto 👍','De acuerdo');
+  add('Voy conduciendo, te escribo luego','Ahora no puedo');
+  return out.filter(Boolean).slice(0,4);
+}
+async function waResponder(nombre,texto){
+  const r=await api('/api/whatsapp',{accion:'responder',nombre,texto}).catch(()=>({ok:false,error:'Sin respuesta'}));
+  if(r.ok){ toast('Enviado a '+nombre+': '+texto); waDecir('Enviado.'); setTimeout(waChatsPoll,500); }
+  else{ toast(r.error||'No se pudo enviar'); waDecir('No he podido enviarlo.'); }
+  return r.ok;
+}
+function waHoja(nombre,texto){
+  const ops=waSugerir(texto), parado=waParado();
+  overlay(`<h2 style="display:flex;gap:10px;align-items:center">${waIco} ${esc(nombre)}</h2>
+    <p class="muted" style="margin:0 0 12px">${parado?esc(texto):'Te lo he leído en voz alta · elige una respuesta'}</p>
+    <div class="wa-hoja">${ops.map((o,i)=>`<button class="pill ${i?'':'on'}" data-wah="${i}">${esc(o)}</button>`).join('')}</div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="pill" id="waRep">Repetir</button><button class="pill" id="cOv">Cerrar</button></div>`);
+  $('cOv').onclick=closeOv; $('waRep').onclick=()=>waDecir(`${nombre} dice: ${texto}`);
+  document.querySelectorAll('[data-wah]').forEach(b=>b.onclick=async()=>{ closeOv(); await waResponder(nombre,ops[+b.dataset.wah]); });
+  clearTimeout(WA.hojaT); WA.hojaT=setTimeout(()=>{ if(document.querySelector('[data-wah]')) closeOv(); },30000);
+}
+document.head.insertAdjacentHTML('beforeend',`<style>
+.wa-hoja{display:grid;grid-template-columns:1fr 1fr;gap:10px}.wa-hoja .pill{font-size:19px;padding:18px 14px;border-radius:16px;min-height:64px;text-align:center}
+.wa-sug{display:flex;gap:8px;flex-wrap:wrap;padding-top:8px}
+</style>`);
+/* Al llegar un WhatsApp: lo lee (según el ajuste) y, conduciendo, ofrece respuestas */
+{ const _av=waAviso; waAviso=function(e){
+    const modo=waLeerModo(), conduciendo=!waParado(), nombre=e.titulo||'WhatsApp', texto=e.texto||'';
+    const leer=modo==='siempre'||(modo==='conducir'&&conduciendo);
+    if(PH.dnd||!leer){ return _av(e); }
+    decorate(); beep(1320,.08,2);
+    waDecir(`Mensaje de ${nombre}. ${/^📷/.test(texto)?'Te ha mandado una foto':/^🎤/.test(texto)?'Te ha mandado un audio':texto}`);
+    if(waEnVivo()) waHoja(nombre,texto); else _av(e);
+  }; }
+/* Dentro de un chat: respuestas rápidas al último mensaje recibido */
+{ const _v=VIEWS.mensajes; VIEWS.mensajes=()=>{ let h=_v();
+    if(waEnVivo()&&WA.abierto&&WA.chat&&WA.chat.nombre===WA.abierto){ const ult=(WA.chat.msgs||[]).filter(m=>!m.yo).slice(-1)[0];
+      if(ult){ const ops=waSugerir(ult.texto); h=h.replace(/(<div class="wa-esc">|<div class="qr">)/,`<div class="wa-sug">${ops.map(o=>`<button class="pill" data-wasug="${esc(o)}">${esc(o)}</button>`).join('')}</div>$1`); } }
+    if(waEnVivo()&&!WA.abierto) h=h.replace('<button class="pill" data-wa="salir">',`<button class="pill" data-wa="leermodo">Leer mensajes: ${WA_LEER_TXT[waLeerModo()]}</button><button class="pill" data-wa="salir">`);
+    return h; }; }
+document.addEventListener('click',async e=>{
+  const s=e.target.closest('[data-wasug]'); if(s){ e.stopPropagation(); if(WA.abierto) await waResponder(WA.abierto,s.dataset.wasug); return; }
+  const m=e.target.closest('[data-wa="leermodo"]'); if(m){ e.stopPropagation(); const o=['conducir','siempre','nunca'], n=o[(o.indexOf(waLeerModo())+1)%3]; LS.set('rp-wa-leer',n);
+    toast('Leer los WhatsApp en voz alta: '+WA_LEER_TXT[n]); renderApp(); }
+},true);
+/* «Siri, lee mis mensajes»: lee los chats con mensajes sin leer */
+{ const _rt=readThread; readThread=function(name){ if(!waEnVivo()) return _rt(name); const c=(WA.chats||[]).find(x=>x.nombre===name);
+    waDecir(c?`${name}: ${c.prev}`:`No tengo mensajes de ${name}.`); }; }

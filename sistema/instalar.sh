@@ -99,11 +99,25 @@ else
   instala si "$CH"
 fi
 instala si python3 python3-serial curl
-instala no python3-gpiozero python3-lgpio gpsd gpsd-clients unzip rsync wlr-randr
+instala no espeak-ng libttspico-utils python3-gpiozero python3-lgpio gpsd gpsd-clients unzip rsync wlr-randr
 echo "  Piezas opcionales (Bluetooth del iPhone, ruedas, acelerómetro, LEDs, dashcam):"
 instala no bluez bluez-obexd ofono python3-dbus python3-gi python3-smbus python3-spidev ffmpeg v4l-utils i2c-tools pulseaudio-utils pipewire-bin alsa-utils
 if ! sudo -u "$U" python3 -c "import bleak" 2>/dev/null; then
   apt-get install "${APTO[@]}" python3-bleak >/dev/null 2>&1 || sudo -u "$U" python3 -m pip install --user --break-system-packages bleak >/dev/null 2>&1 || echo "  · bleak no instalado (solo hace falta para los sensores de ruedas)"
+fi
+
+# Voz natural en español (Piper). Si no se puede descargar, se usa pico2wave o espeak-ng
+PIPER="$H/.local/share/radar-play/piper"
+if [ ! -x "$PIPER/piper/piper" ] && [ "$(uname -m)" = "aarch64" ]; then
+  echo "  · Descargando la voz en español (unos 80 MB)…"
+  sudo -u "$U" mkdir -p "$PIPER"
+  if sudo -u "$U" bash -c "cd '$PIPER' && timeout 300 wget -q -O piper.tgz https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_aarch64.tar.gz && tar xzf piper.tgz && rm -f piper.tgz \
+      && timeout 300 wget -q -O es_ES-davefx-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/es/es_ES/davefx/medium/es_ES-davefx-medium.onnx \
+      && timeout 120 wget -q -O es_ES-davefx-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/es/es_ES/davefx/medium/es_ES-davefx-medium.onnx.json"; then
+    bien "Voz en español instalada"
+  else
+    rm -rf "$PIPER"; echo "  · No se pudo descargar la voz natural: se usará la voz básica"
+  fi
 fi
 
 paso "3/10 Comprobando que Radar Play arranca"

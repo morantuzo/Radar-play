@@ -551,6 +551,18 @@ def p_wa(d):
         return abrir_chat(str(d.get("nombre") or ""))
     if a == "cerrar_chat":
         return cerrar_chat()
+    if a == "responder":                 # respuesta rápida sin abrir nada en la pantalla
+        nombre, texto = str(d.get("nombre") or ""), str(d.get("texto") or "").strip()
+        if not texto:
+            return {"ok": False, "error": "Respuesta vacía"}
+        seguia = _datos.get("abierto")
+        r = abrir_chat(nombre)
+        if not r.get("ok"):
+            return r
+        r = entrada({"t": "enviar", "v": texto})
+        if seguia != nombre:
+            cerrar_chat()                 # vuelve a dejarlo cerrado para que sigan llegando los avisos
+        return r
     if a == "reiniciar":
         cerrar_chromium()                      # el hilo lo vuelve a abrir
         return {"ok": True}

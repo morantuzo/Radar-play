@@ -98,6 +98,11 @@ WHATSAPP
   hora, sin leer) con la interfaz de Radar Play. Abres un chat y ves los
   mensajes (en grupos, quien escribe; numero si WhatsApp lo da) y puedes
   contestar parado. En marcha, el texto se oculta (boton Leer).
+- Conduciendo, cada WhatsApp se lee en voz alta y salen 3-4 respuestas
+  rapidas que encajan con el mensaje (hora de llegada si vas con ruta, "te
+  llamo en cuanto pare"...). Tocas una y se envia. En la lista de chats:
+  "Leer mensajes: Al conducir / Siempre / Nunca".
+- La voz sale por los altavoces de la Raspberry (Piper; si no, espeak-ng).
 - Vienen de WhatsApp Web, abierto en segundo plano en la Raspberry. La
   primera vez: WhatsApp > Conectar WhatsApp y escanea el QR con el iPhone
   (WhatsApp > Ajustes > Dispositivos vinculados > Vincular un dispositivo).
