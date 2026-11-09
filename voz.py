@@ -63,12 +63,23 @@ def _hilo():
         try:
             _estado["hablando"] = True
             if _sintetizar(texto, ruta):
+                _duck(True)
                 _reproducir(ruta)
         except Exception as e:
             LOG.aviso("Voz: %s", e, origen="voz")
         finally:
             _estado["hablando"] = not _cola.empty()
             _estado["proc"] = None
+            if not _estado["hablando"]:
+                _duck(False)
+
+
+def _duck(on):
+    try:
+        import ytm
+        ytm.duck(on)
+    except Exception:
+        pass
 
 
 def callar():

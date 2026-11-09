@@ -16,7 +16,7 @@ section{background:var(--panel);border:1px solid var(--line);border-radius:18px;
 h2{font-size:13px;margin:0;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
 ol{margin:0;padding-left:20px;color:var(--muted);font-size:14.5px}ol b{color:var(--fg)}
 input[type=url],input[type=text]{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:13px 14px;color:var(--fg);font:inherit}
-button,label.btn{font:inherit;font-weight:700;border:0;border-radius:12px;padding:15px 10px;background:var(--panel-2);color:var(--fg);text-align:center;display:block;width:100%;cursor:pointer}
+button,label.btn,a.btn{text-decoration:none;font:inherit;font-weight:700;border:0;border-radius:12px;padding:15px 10px;background:var(--panel-2);color:var(--fg);text-align:center;display:block;width:100%;cursor:pointer}
 .on{background:var(--accent)!important;color:#fff!important}
 input[type=file]{display:none}
 .est{font-size:15px}.est b{display:block;font-size:18px;margin-bottom:2px}
@@ -47,6 +47,14 @@ input[type=file]{display:none}
   <button class="on" id="bG">Enviar al coche y comprobar</button>
   <button id="bApis">Solo comprobar las APIs</button>
   <div id="apis"></div>
+</section>
+
+<section>
+  <h2>Registro de fallos</h2>
+  <p class="muted" style="margin:0">Descarga lo que ha pasado en Radar Play para ver los fallos de cerca (o mandármelo). En el iPhone se abre y puedes guardarlo en Archivos con Compartir.</p>
+  <div class="muted" id="regN"></div>
+  <a class="btn on" id="aRegE" href="#" download>Descargar errores y avisos</a>
+  <a class="btn" id="aRegT" href="#" download>Descargar registro completo</a>
 </section>
 
 <section>
@@ -149,6 +157,8 @@ $('fc').onchange=async()=>{ const f=$('fc').files[0]; if(!f) return; $('fcR').te
   try{ const j=await (await fetch('/api/actualizar/contactos?k='+encodeURIComponent(K),{method:'POST',headers:{'Content-Type':'text/vcard'},body:f})).json();
     $('fcR').innerHTML=j.ok?'<span class="ok">✓ '+esc(j.msg)+'</span>':'<span class="mal">'+esc(j.error||'No se pudo')+'</span>'; }
   catch(e){ $('fcR').innerHTML='<span class="mal">No conecto con el coche</span>'; } $('fc').value=''; };
+$('aRegE').href='/api/actualizar/registro?tipo=errores&k='+encodeURIComponent(K);
+$('aRegT').href='/api/actualizar/registro?tipo=todo&k='+encodeURIComponent(K);
 $('bUrl').onclick=()=>{ const u=$('url').value.trim(); if(!u) return $('url').focus(); remoto({accion:'enlace',url:u}); };
 $('bAtras').onclick=()=>{ if(confirm('¿Volver a la versión anterior?')) remoto({accion:'deshacer'}); };
 </script>

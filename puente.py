@@ -35,9 +35,9 @@ import sistema_rp as SIS
 import registro as LOG
 LOG.iniciar(SIS.cargar_conf().get("LOG_NIVEL", "info"))
 import coche as COCHE
-import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ
-MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, LOG]
-NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz")    # muy frecuentes o grandes
+import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ, ytm as YTM
+MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, YTM, LOG]
+NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz", "/api/ytm")    # muy frecuentes o grandes
 _c = SIS.cargar_conf()
 if os.path.exists(SIS.CONF_FILE):
     PUERTO_WEB = int(_c["PUERTO"])
@@ -357,6 +357,27 @@ class Manejador(SimpleHTTPRequestHandler):
         if ruta.path == "/api/whatsapp/pantalla" and self.es_local():   # WhatsApp Web en directo (imágenes MJPEG)
             q = urllib.parse.parse_qs(ruta.query)
             return WAW.emitir(self, int((q.get("w") or ["1100"])[0]), int((q.get("h") or ["650"])[0]))
+        if ruta.path == "/api/actualizar/registro":               # descargar el registro de fallos desde el iPhone (con código)
+            q = urllib.parse.parse_qs(ruta.query)
+            if not self.es_local() and (q.get("k") or [""])[0] != CODIGO:
+                return self.responder({"ok": False, "error": "Código incorrecto. Abre esta página desde el mando."}, 403)
+            todo = (q.get("tipo") or [""])[0] == "todo"
+            lineas = LOG.ultimas(8000 if todo else 3000, None if todo else "errores")
+            cab = ["Radar Play · registro %s" % ("completo" if todo else "de errores y avisos"),
+                   "Versión: %s · %s · %s" % (SIS.VERSION, SIS.MODELO or "", time.strftime("%Y-%m-%d %H:%M:%S")),
+                   "Errores: %d · Avisos: %d (desde %s)" % (LOG.cuenta["errores"], LOG.cuenta["avisos"], time.strftime("%Y-%m-%d %H:%M", time.localtime(LOG.cuenta["desde"]))),
+                   "=" * 70, ""]
+            cuerpo = ("\n".join(cab + (lineas or ["(sin líneas)"])) + "\n").encode("utf-8")
+            nombre = "radar-play-%s-%s.txt" % ("registro" if todo else "errores", time.strftime("%Y%m%d-%H%M"))
+            LOG.info("Registro descargado desde %s (%s)", self.client_address[0], "completo" if todo else "errores")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="%s"' % nombre)
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(cuerpo)))
+            self.end_headers()
+            self.wfile.write(cuerpo)
+            return
         if ruta.path == "/api/actualizar/estado":                 # solo versión y progreso (sin código: sigue tras reiniciar)
             i = ACT.info()
             return self.responder({k: i[k] for k in ("version", "anterior", "fase", "msg", "ok", "log", "completa", "online")})
