@@ -101,7 +101,7 @@ fi
 instala si python3 python3-serial curl
 instala no espeak-ng libttspico-utils python3-pil mpv python3-gpiozero python3-lgpio gpsd gpsd-clients unzip rsync wlr-randr
 echo "  Piezas opcionales (Bluetooth del iPhone, ruedas, acelerómetro, LEDs, dashcam):"
-instala no bluez bluez-obexd ofono python3-dbus python3-gi python3-smbus python3-spidev ffmpeg v4l-utils i2c-tools pulseaudio-utils pipewire-bin alsa-utils
+instala no bluez bluez-obexd ofono python3-dbus python3-gi python3-smbus python3-spidev ffmpeg v4l-utils i2c-tools can-utils pulseaudio-utils pipewire-bin alsa-utils
 if ! sudo -u "$U" python3 -c "import bleak" 2>/dev/null; then
   apt-get install "${APTO[@]}" python3-bleak >/dev/null 2>&1 || sudo -u "$U" python3 -m pip install --user --break-system-packages bleak >/dev/null 2>&1 || echo "  · bleak no instalado (solo hace falta para los sensores de ruedas)"
 fi
@@ -201,7 +201,7 @@ bien "Arranque automático de la pantalla"
 
 paso "9/10 Permisos para apagar, WiFi y brillo"
 cat > /etc/sudoers.d/radar-play <<SUDO
-$U ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot, /usr/bin/nmcli, /usr/bin/raspi-config nonint do_overlayfs 0, /usr/bin/raspi-config nonint do_overlayfs 1
+$U ALL=(root) NOPASSWD: /usr/bin/systemctl poweroff, /usr/bin/systemctl reboot, /usr/bin/nmcli, /usr/sbin/ip, /usr/bin/ip, /usr/bin/raspi-config nonint do_overlayfs 0, /usr/bin/raspi-config nonint do_overlayfs 1
 SUDO
 chmod 440 /etc/sudoers.d/radar-play
 visudo -cf /etc/sudoers.d/radar-play >/dev/null || { rm -f /etc/sudoers.d/radar-play; mal "No se pudieron dar los permisos de apagado"; }
@@ -230,6 +230,16 @@ if [ -f "$CMD" ] && [ -f "$CFG" ]; then
   grep -q "^disable_splash=1" "$CFG" || echo "disable_splash=1" >> "$CFG"
   grep -q "^dtparam=watchdog=on" "$CFG" || echo "dtparam=watchdog=on" >> "$CFG"
   bien "Arranque silencioso"
+  # HAT CAN (Waveshare RS485 CAN HAT · MCP2515): SPI + controlador can0
+  CANON="$(grep '^CAN_HAT=' "$APP/sistema/radar-play.conf" | cut -d= -f2 | tr -d ' \r')"
+  OSC="$(grep '^CAN_CRISTAL=' "$APP/sistema/radar-play.conf" | cut -d= -f2 | tr -d ' \r')"; OSC="${OSC:-12000000}"
+  if [ "${CANON:-1}" != "0" ]; then
+    grep -q "^dtparam=spi=on" "$CFG" || echo "dtparam=spi=on" >> "$CFG"
+    if grep -q "^dtoverlay=mcp2515-can0" "$CFG"; then
+      sed -i -E "s/^dtoverlay=mcp2515-can0.*/dtoverlay=mcp2515-can0,oscillator=$OSC,interrupt=25,spimaxfrequency=2000000/" "$CFG"
+    else echo "dtoverlay=mcp2515-can0,oscillator=$OSC,interrupt=25,spimaxfrequency=2000000" >> "$CFG"; fi
+    bien "HAT CAN preparado (cristal $((OSC/1000000)) MHz, interrupción GPIO25)"
+  fi
 else mal "No encuentro $CMD (¿es Raspberry Pi OS?)"; fi
 T=/usr/share/plymouth/themes/pix
 if [ -d "$T" ]; then
@@ -239,6 +249,25 @@ if [ -d "$T" ]; then
   command -v plymouth-set-default-theme >/dev/null && plymouth-set-default-theme pix
   command -v update-initramfs >/dev/null && update-initramfs -u >/dev/null 2>&1
   bien "Logo de Radar Play al encender"
+fi
+if [ "${CANON:-1}" != "0" ]; then
+  VEL="$(grep '^CAN_VELOCIDAD=' "$APP/sistema/radar-play.conf" | cut -d= -f2 | tr -d ' \r')"; VEL="${VEL:-500000}"
+  cat > /etc/systemd/system/radar-play-can.service <<CANS
+[Unit]
+Description=Radar Play - bus CAN del coche (can0)
+After=sys-subsystem-net-devices-can0.device
+BindsTo=sys-subsystem-net-devices-can0.device
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/sbin/ip link set can0 down
+ExecStart=/usr/sbin/ip link set can0 up type can bitrate $VEL restart-ms 100
+ExecStart=/usr/sbin/ip link set can0 txqueuelen 100
+[Install]
+WantedBy=sys-subsystem-net-devices-can0.device
+CANS
+  systemctl daemon-reload; systemctl enable radar-play-can.service >/dev/null 2>&1
+  bien "can0 se levanta solo a $VEL bit/s"
 fi
 mkdir -p /etc/systemd/system.conf.d
 printf '[Manager]\nRuntimeWatchdogSec=15\nRebootWatchdogSec=2min\n' > /etc/systemd/system.conf.d/radar-play-watchdog.conf

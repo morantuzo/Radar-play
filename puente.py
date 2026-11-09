@@ -35,9 +35,9 @@ import sistema_rp as SIS
 import registro as LOG
 LOG.iniciar(SIS.cargar_conf().get("LOG_NIVEL", "info"))
 import coche as COCHE
-import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ, ytm as YTM, arranque as ARR
-MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, YTM, ARR, LOG]
-NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz", "/api/ytm", "/api/arranque")    # muy frecuentes o grandes
+import gasolineras as GAS, garaje as GAR, ruedas as RUE, bt as BT, acel as ACEL, dashcam as DASH, leds as LED, apps as APPW, actualizar as ACT, google_cfg as GCFG, whatsapp_web as WAW, voz as VOZ, ytm as YTM, arranque as ARR, obd_can as CAN
+MODULOS = [GAS, GAR, RUE, BT, ACEL, DASH, LED, APPW, ACT, GCFG, WAW, VOZ, YTM, ARR, CAN, LOG]
+NO_ANOTAR = ("/api/telemetria", "/api/log", "/api/gasolineras", "/api/ajustes", "/api/whatsapp", "/api/voz", "/api/ytm", "/api/arranque", "/api/can")    # muy frecuentes o grandes
 _c = SIS.cargar_conf()
 if os.path.exists(SIS.CONF_FILE):
     PUERTO_WEB = int(_c["PUERTO"])
@@ -217,6 +217,16 @@ def buscar_puertos(serial_mod):
 
 
 def conectar(serial_mod):
+    try:                                     # 1º el HAT CAN (Waveshare RS485 CAN HAT): directo al bus, sin ELM327
+        e = CAN.conectar_obd()
+        if e:
+            return e
+        if CAN.estado.get("hay"):
+            publicar(ok=False, estado=CAN.estado.get("msg") or "HAT CAN listo, esperando al coche")
+    except Exception as ex:
+        LOG.aviso("CAN: %s", ex, origen="can")
+    if serial_mod is None:
+        return None
     for puerto in buscar_puertos(serial_mod):
         for baud in VELOCIDADES_OBD:
             try:
@@ -242,12 +252,12 @@ def hilo_obd():
     try:
         import serial  # pyserial
     except ImportError:
-        publicar(ok=False, estado="Falta pyserial: ejecuta  pip install pyserial")
-        return
+        serial = None                       # sin pyserial aún se puede leer por el HAT CAN
     while True:
         e = conectar(serial)
         if not e:
-            publicar(ok=False, estado="No encuentro el adaptador OBD-II")
+            if not CAN.estado.get("hay"):
+                publicar(ok=False, estado="No encuentro el adaptador OBD-II" if serial else "Falta pyserial y no hay HAT CAN")
             time.sleep(5)
             continue
         publicar(ok=True, estado="OBD-II conectado en " + e.puerto)
@@ -389,6 +399,22 @@ class Manejador(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(cuerpo)))
             self.end_headers()
             self.wfile.write(cuerpo)
+            return
+        if ruta.path == "/api/can/grabacion":                     # última grabación del bus CAN (para mandármela)
+            q = urllib.parse.parse_qs(ruta.query)
+            if not self.es_local() and (q.get("k") or [""])[0] != CODIGO:
+                return self.responder({"ok": False, "error": "Código incorrecto. Abre esta página desde el mando."}, 403)
+            g = CAN.ultima_grabacion()
+            if not g:
+                return self.responder({"ok": False, "error": "Aún no hay ninguna grabación del bus"}, 404)
+            b = open(g, "rb").read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="%s"' % os.path.basename(g))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(b)))
+            self.end_headers()
+            self.wfile.write(b)
             return
         if ruta.path == "/api/actualizar/estado":                 # solo versión y progreso (sin código: sigue tras reiniciar)
             i = ACT.info()

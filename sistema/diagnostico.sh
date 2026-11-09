@@ -25,6 +25,13 @@ echo
 echo "== Prueba de arranque del puente"
 ( cd "$DIR" && timeout 8 python3 -c "import puente; print('  carga bien')" ) 2>&1 | tail -n 12 | sed 's/^/  /'
 echo
+echo "== HAT CAN"
+grep -hE "^dtparam=spi|^dtoverlay=mcp2515" /boot/firmware/config.txt /boot/config.txt 2>/dev/null | sed 's/^/  config: /'
+dmesg 2>/dev/null | grep -i mcp251 | tail -n 3 | sed 's/^/  kernel: /'
+if ip link show can0 >/dev/null 2>&1; then ip -details -statistics link show can0 | sed 's/^/  /'
+  command -v candump >/dev/null && { echo "  2 s de tráfico:"; timeout 2 candump -n 10 can0 2>&1 | sed 's/^/    /'; }
+else echo "  can0: NO existe (¿HAT puesto? ¿reiniciado tras instalar? ¿cristal 12/8 MHz correcto?)"; fi
+echo
 echo "== Pantalla a pantalla completa"
 grep -h kiosk "$HOME/.config/labwc/autostart" 2>/dev/null | sed 's/^/  labwc: /'
 tail -n 5 "$DIR/datos/logs/kiosk.log" 2>/dev/null | sed 's/^/  /'

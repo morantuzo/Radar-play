@@ -13,6 +13,6 @@ vuelve "$BOOT/cmdline.txt"; vuelve "$BOOT/config.txt"
 vuelve /usr/share/plymouth/themes/pix/splash.png
 vuelve /etc/default/gpsd
 rm -f "$H/.config/systemd/user/default.target.wants/radar-play.service" "$H/.config/systemd/user/radar-play.service"
-rm -f /etc/sudoers.d/radar-play /etc/udev/rules.d/90-radar-play.rules /etc/systemd/system.conf.d/radar-play-watchdog.conf
+rm -f /etc/sudoers.d/radar-play /etc/udev/rules.d/90-radar-play.rules /etc/systemd/system.conf.d/radar-play-watchdog.conf /etc/systemd/system/radar-play-can.service
 command -v update-initramfs >/dev/null && update-initramfs -u >/dev/null 2>&1 || true
 echo "Hecho. Radar Play ya no arranca solo. Reinicia con: sudo reboot"

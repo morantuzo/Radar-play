@@ -64,6 +64,7 @@ input[type=file]{display:none}
   <div class="muted" id="regN"></div>
   <a class="btn on" id="aRegE" href="#" download>Descargar errores y avisos</a>
   <a class="btn" id="aRegT" href="#" download>Descargar registro completo</a>
+  <a class="btn" id="aCan" href="#" download>Descargar última grabación del bus CAN</a>
 </section>
 
 <section>
@@ -180,6 +181,7 @@ $('bArrQL').onclick=async()=>{ if(confirm('¿Quitar tu logo?')){ await arrRem({a
 $('bArrQS').onclick=async()=>{ if(confirm('¿Quitar tu sonido?')){ await arrRem({accion:'arranque_quitar',tipo:'sonido'}); arrEstado(); } };
 $('aRegE').href='/api/actualizar/registro?tipo=errores&k='+encodeURIComponent(K);
 $('aRegT').href='/api/actualizar/registro?tipo=todo&k='+encodeURIComponent(K);
+$('aCan').href='/api/can/grabacion?k='+encodeURIComponent(K);
 $('bUrl').onclick=()=>{ const u=$('url').value.trim(); if(!u) return $('url').focus(); remoto({accion:'enlace',url:u}); };
 $('bAtras').onclick=()=>{ if(confirm('¿Volver a la versión anterior?')) remoto({accion:'deshacer'}); };
 </script>

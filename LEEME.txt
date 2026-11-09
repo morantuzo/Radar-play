@@ -157,6 +157,23 @@ ACTUALIZAR SIN PENDRIVE
   version nueva de la configuracion se deja como radar-play.conf.nuevo.
 - Se guarda la version anterior: Sistema > Actualizar > Volver a ella.
 
+HAT CAN (WAVESHARE RS485 CAN HAT) · EL COCHE SIN ELM327
+- Radar Play lee el motor directamente del bus CAN del OBD. Si el HAT está
+  puesto y el coche contesta, se usa antes que cualquier ELM327.
+- Cables (de la coleta OBD de 16 pines al HAT, lado CAN, NO el RS485):
+    pin 6  → CAN H     pin 14 → CAN L     pin 5 → GND
+  El puente/interruptor de 120 Ω del HAT, QUITADO (el coche ya lleva los suyos).
+  Aísla con cinta los demás cables de la coleta, sobre todo el pin 16 (12 V).
+- Pi 400: necesitas un cable alargador de 40 pines (el HAT no encaja directo).
+- Al instalar se activa SPI y el controlador MCP2515 (cristal 12 MHz,
+  interrupción GPIO25) y can0 se pone a 500 kbit/s solo al encender.
+  Si tu HAT tiene cristal de 8 MHz: Sistema › Coche (HAT CAN) › 8 MHz y reinicia.
+- Sistema › Coche › «Escuchar el coche»: ves en directo los mensajes del bus y
+  los puedes grabar con marcas («pulso volumen +»). Solo escucha: no manda nada.
+  La grabación se descarga desde el mando del iPhone y me la puedes pasar para
+  sacar más datos del coche.
+- En la terminal:  candump can0   (para ver el bus a mano)
+
 EN LA RASPBERRY PI
 Lee GUIA-RASPBERRY.txt: se instala una vez con  sudo bash sistema/instalar.sh
 y desde entonces arranca solo como sistema del coche.
