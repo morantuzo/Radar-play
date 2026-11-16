@@ -203,6 +203,10 @@ HAT CAN (WAVESHARE RS485 CAN HAT) · EL COCHE SIN ELM327
   los puedes grabar con marcas («pulso volumen +»). Solo escucha: no manda nada.
   La grabación se descarga desde el mando del iPhone y me la puedes pasar para
   sacar más datos del coche.
+- Comprobación del HAT: al encender, Radar Play prueba el HAT solo (a los
+  10 s) y avisa. También en Sistema › Coche › «Comprobar». Manda un mensaje en
+  circuito cerrado (no sale al coche) y mira si vuelve: así sabe si los 7 cables
+  (3V3, GND, MOSI, MISO, SCK, CS, INT) están bien, y si no, cuál revisar.
 - En la terminal:  candump can0   (para ver el bus a mano)
 
 EN LA RASPBERRY PI

@@ -10,7 +10,8 @@ function canResumen(d){
   if(!d.hay) return ['Sin HAT CAN','No veo can0. Pon el HAT, instala esta versión y reinicia'];
   if(!d.arriba) return ['HAT listo, bus parado','can0 existe pero está apagado'];
   const ok=d.bus==='ERROR-ACTIVE'||d.bus==='';
-  return [ok?'Bus OK':'Bus con errores', `${(d.velocidad/1000)|0} kbit/s · cristal ${d.cristal?(d.cristal/1e6)+' MHz':'—'} · ${esc(d.bus||'')}`];
+  const vivo=d.ult_trama&&Date.now()/1000-d.ult_trama<10;
+  return [ok||vivo?'Bus OK':'Bus sin respuesta (¿coche conectado?)', `${(d.velocidad/1000)|0} kbit/s · cristal ${d.cristal?(d.cristal/1e6)+' MHz':'—'} · ${esc(d.bus||'')}`];
 }
 function canHTML(){
   if(!SYS.bridge) return '';
@@ -18,9 +19,25 @@ function canHTML(){
   return `<h3 class="sh">Coche (HAT CAN)</h3>
     <div class="set"><div><b>${t}</b><div class="muted">${s}${d&&d.msg?' · '+esc(d.msg):''}</div>${d&&d.pista?`<div class="muted" style="color:var(--warn,#f5a524)">${esc(d.pista)}</div>`:''}</div>
       <span style="display:flex;gap:8px">${d&&d.hay?'<button class="pill on" data-can="abrir">Escuchar el coche</button>':''}${d&&d.hay&&!d.arriba?'<button class="pill" data-can="levantar">Encender bus</button>':''}</span></div>
+    ${canVerifHTML(d)}
     ${d&&d.hay?`<div class="set"><div><b>Cristal del HAT</b><div class="muted">Míralo en el componente plateado junto al chip MCP2515 (12.000 u 8.000). Si no coincide, el bus da errores. Cambiarlo pide reiniciar.</div></div>
       <span style="display:flex;gap:8px"><button class="pill ${d.cristal===12000000?'on':''}" data-can="cristal" data-hz="12000000">12 MHz</button><button class="pill ${d.cristal===8000000?'on':''}" data-can="cristal" data-hz="8000000">8 MHz</button></span></div>`:''}`;
 }
+function canVerifHTML(d){
+  if(!d) return '';
+  const v=d.verif, ic=o=>o===true?'<b style="color:#3ddc84">✓</b>':o===false?'<b style="color:#ff5a5a">✗</b>':'<b style="color:#999">–</b>';
+  const tit=d.verificando?'Comprobando el HAT…':!v?'HAT sin comprobar':v.ok?'✓ El HAT funciona':'✗ El HAT tiene un problema';
+  const cuando=v&&v.t?' · '+new Date(v.t*1000).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}):'';
+  const acc=v&&!d.verificando?(v.accion==='activar'?'<button class="pill on" data-can="activar">Activar HAT</button>':(v.accion==='reiniciar'||v.accion==='reiniciar_o_cables')?'<button class="pill on" data-sys="reiniciar">Reiniciar</button>':''):'';
+  return `<div class="set" style="align-items:flex-start"><div style="flex:1"><b>${tit}</b><div class="muted">Prueba la conexión con el HAT sin tocar el coche${cuando}</div>
+      ${v&&v.pasos?`<div style="margin-top:8px;display:grid;gap:6px">${v.pasos.map(p=>`<div style="display:flex;gap:10px;align-items:baseline">${ic(p.ok)}<div><b style="font-weight:600">${esc(p.paso)}</b><div class="muted">${esc(p.msg)}</div></div></div>`).join('')}</div>`:''}</div>
+    <span style="display:flex;gap:8px">${acc}<button class="pill" data-can="verificar" ${d.verificando?'disabled':''}>${d.verificando?'<span class="rlspin" style="width:16px;height:16px;vertical-align:-3px"></span>':'Comprobar'}</button></span></div>`;
+}
+/* Al encender: avisa una vez del resultado de la comprobación automática */
+{ let n=0; const t=setInterval(async()=>{ if(++n>30) return clearInterval(t); if(!SYS.bridge) return; const d=await canCargar(); const v=d&&d.verif; if(!v||!v.auto) return; clearInterval(t);
+    let ya=''; try{ ya=sessionStorage.getItem('rp-can-verif')||''; }catch(e){}
+    if(ya===String(v.t)) return; try{ sessionStorage.setItem('rp-can-verif',String(v.t)); }catch(e){}
+    toast(v.ok?'HAT CAN comprobado: funciona ✓':'HAT CAN: '+v.resumen+' (Sistema › Coche)'); },4000); }
 { const _v=VIEWS.sistema; VIEWS.sistema=()=>{ const s=_v(); return s.replace('<h3 class="sh">Energía</h3>',canHTML()+'<h3 class="sh">Energía</h3>'); }; }
 { const _sv=setView; setView=function(v,...a){ const r=_sv(v,...a); if(v==='sistema'&&SYS.bridge) canCargar().then(()=>{ if(S.view==='sistema'&&$('ov').hidden) renderApp(); }); return r; }; }
 
@@ -59,6 +76,8 @@ function canAbrir(){
 }
 document.addEventListener('click',async e=>{ const el=e.target.closest('[data-can]'); if(!el) return; e.stopPropagation(); const a=el.dataset.can;
   if(a==='abrir') return canAbrir();
+  if(a==='verificar'){ await api('/api/can',{accion:'verificar'}).catch(()=>{}); toast('Comprobando el HAT…'); const t=setInterval(async()=>{ const d=await canCargar(); if(S.view==='sistema'&&$('ov').hidden) renderApp(); if(d&&!d.verificando){ clearInterval(t); toast(d.verif&&d.verif.ok?'El HAT funciona ✓':'El HAT tiene un problema: mira los pasos'); } },1000); setTimeout(()=>clearInterval(t),30000); await canCargar(); renderApp(); return; }
+  if(a==='activar'){ const r=await api('/api/can',{accion:'activar'}).catch(()=>({})); toast(r.msg||r.error||'Hecho'); await canCargar(); renderApp(); return; }
   if(a==='levantar'){ const r=await api('/api/can',{accion:'levantar'}).catch(()=>({})); if(r.error) toast(r.error); await canCargar(); renderApp(); }
   if(a==='cristal') confirmBox('¿Cristal de '+(+el.dataset.hz/1e6)+' MHz?','Se cambia la configuración del HAT. Después reinicia la Raspberry.','Cambiar',async()=>{ const r=await api('/api/can',{accion:'cristal',hz:+el.dataset.hz}).catch(()=>({})); toast(r.msg||r.error||'Hecho'); await canCargar(); renderApp(); });
 },true);

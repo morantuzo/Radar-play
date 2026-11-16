@@ -16,7 +16,7 @@ DIR_GRAB = os.path.join(CARPETA, "datos", "can")
 FMT = "=IB3x8s"                      # struct can_frame
 EFF, RTR, ERR = 0x80000000, 0x40000000, 0x20000000
 estado = {"interfaz": None, "hay": False, "arriba": False, "bus": "", "velocidad": 0, "errores": "", "tramas": 0,
-          "escuchando": False, "grabando": None, "msg": "", "ult_trama": 0}
+          "escuchando": False, "grabando": None, "msg": "", "ult_trama": 0, "verif": None, "verificando": False}
 _esc = {"ids": {}, "sock": None, "f": None, "t0": 0, "marcas": []}
 _cerrojo = threading.Lock()
 
@@ -215,7 +215,7 @@ def _pista():
     """Qué puede estar mal según el estado del bus."""
     b = estado.get("bus", "")
     if b in ("ERROR-PASSIVE", "BUS-OFF"):
-        return ("El bus da errores: revisa CAN-H (pin 6) y CAN-L (pin 14), que no estén cruzados, que el puente de 120 Ω del HAT "
+        return ("Si estás conectado al coche con el contacto puesto y sale esto, revisa CAN-H (pin 6) y CAN-L (pin 14), que no estén cruzados, que el puente de 120 Ω del HAT "
                 "esté quitado y que el cristal configurado coincida con el del HAT (12 u 8 MHz).")
     if estado.get("ult_trama") and time.time() - estado["ult_trama"] < 5:
         return "Se ve tráfico en el bus, pero el motor no contesta a las preguntas de diagnóstico."
@@ -363,6 +363,191 @@ def cristal_actual():
     return None
 
 
+# ===================== Comprobar el HAT =====================
+CONFIGS = ("/boot/firmware/config.txt", "/boot/config.txt")
+_verif_lock = threading.Lock()
+
+
+def _config():
+    for c in CONFIGS:
+        if os.path.exists(c):
+            try:
+                return c, open(c).read()
+            except Exception:
+                return c, ""
+    return None, ""
+
+
+def _kernel_mcp():
+    """Lo que dijo el kernel sobre el chip MCP2515 en este arranque."""
+    for cmd in (["dmesg"], ["sudo", "-n", "dmesg"], ["journalctl", "-k", "-b", "--no-pager", "-q"]):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if r.returncode == 0 and r.stdout:
+                return [l.strip() for l in r.stdout.splitlines() if re.search(r"mcp251|can0|spi0\.0", l, re.I)][-8:]
+        except Exception:
+            pass
+    return []
+
+
+def _arrancado_desde():
+    try:
+        return time.time() - float(open("/proc/uptime").read().split()[0])
+    except Exception:
+        return 0
+
+
+def _bucle_cerrado(n, vel):
+    """Pone el chip en modo «circuito cerrado» (no sale nada al coche), manda un mensaje y espera recibirlo.
+    Si vuelve, funcionan los 7 cables: corriente, SPI (MOSI, MISO, SCK, CS) y el aviso INT."""
+    marca = bytes(b"RADARPLY")
+    try:
+        _sudo("ip", "link", "set", n, "down")
+        r = _sudo("ip", "link", "set", n, "type", "can", "bitrate", str(vel), "loopback", "on")
+        if r.returncode:
+            return None, "No pude poner el modo de prueba: " + (r.stderr or "").strip()[:100]
+        _sudo("ip", "link", "set", n, "up")
+        time.sleep(0.2)
+        s = _sock(n, 0.2)
+        try:
+            for intento in range(3):
+                s.send(struct.pack(FMT, 0x5A5, 8, marca))
+                fin = time.time() + 1.0
+                while time.time() < fin:
+                    try:
+                        cid, d = _trama(s)
+                    except socket.timeout:
+                        continue
+                    if (cid & 0x7FF) == 0x5A5 and d == marca:
+                        return True, ""
+        finally:
+            s.close()
+        return False, ""
+    except OSError as e:
+        return False, str(e)[:100]
+    finally:
+        _sudo("ip", "link", "set", n, "down")
+        _sudo("ip", "link", "set", n, "type", "can", "bitrate", str(vel), "loopback", "off", "restart-ms", "100")
+        _sudo("ip", "link", "set", n, "up")
+
+
+def verificar(auto=False):
+    """Comprueba el HAT paso a paso y deja el resultado en estado["verif"]."""
+    if not _verif_lock.acquire(blocking=False):
+        return estado.get("verif") or {"ok": None}
+    pasos, accion = [], None
+
+    def paso(nombre, ok, msg):
+        pasos.append({"paso": nombre, "ok": ok, "msg": msg})
+        return ok
+
+    try:
+        estado["verificando"] = True
+        cfg, txt = _config()
+        spi = bool(re.search(r"^\s*dtparam=spi=on", txt, re.M))
+        ov = re.search(r"^\s*dtoverlay=mcp2515-can0[^\n]*", txt, re.M)
+        n = interfaz()
+        # 1. Configuración
+        if not (spi and ov):
+            paso("Configuración", False, "Falta activar el HAT en la Raspberry (SPI y controlador MCP2515).")
+            accion = "activar"
+            return _fin(pasos, accion, auto)
+        osc = re.search(r"oscillator=(\d+)", ov.group(0))
+        irq = re.search(r"interrupt=(\d+)", ov.group(0))
+        paso("Configuración", True, "SPI activado · MCP2515 con cristal de %s MHz · aviso en GPIO%s (pin 22)" %
+             (int(osc.group(1)) // 1000000 if osc else "?", irq.group(1) if irq else "?"))
+        # 2. El chip
+        if not n:
+            try:
+                cambiado = bool(cfg) and os.path.getmtime(cfg) > _arrancado_desde() + 5
+            except OSError:
+                cambiado = False
+            if cambiado:
+                paso("Chip MCP2515", False, "La configuración se ha cambiado después de encender: falta reiniciar.")
+                accion = "reiniciar"
+                return _fin(pasos, accion, auto)
+            k = " ".join(_kernel_mcp())
+            if re.search(r"wrong wiring|didn't enter in conf mode|probe.*fail|failed to", k, re.I):
+                paso("Chip MCP2515", False, "La Raspberry no consigue hablar con el chip del HAT. Revisa los cables MOSI (pin 19), "
+                     "MISO (pin 21), SCK (pin 23) y CS (pin 24), y la corriente: 3V3 (pin 1) y GND (pin 6).")
+            else:
+                paso("Chip MCP2515", False, "No aparece el HAT (can0). ¿Está conectado y bien encajado? Si acabas de instalar, reinicia.")
+            accion = "reiniciar_o_cables"
+            return _fin(pasos, accion, auto)
+        paso("Chip MCP2515", True, "La Raspberry ve el chip del HAT (can0)")
+        # 3. Circuito cerrado
+        vel = _vel()
+        ok, err = _bucle_cerrado(n, vel)
+        if ok:
+            paso("Prueba de los 7 cables", True, "Mensaje de prueba enviado y recibido: corriente, SPI e INT funcionan")
+        else:
+            paso("Prueba de los 7 cables", False, err or "El mensaje de prueba no vuelve. Lo más probable: el cable INT (pin 22) "
+                 "suelto o en otro pin. Revisa también MISO (pin 21).")
+            return _fin(pasos, "cables", auto)
+        # 4. El bus del coche (informativo)
+        info_interfaz()
+        vistas = 0
+        try:
+            s = _sock(n, 0.2)
+            fin = time.time() + 1.5
+            while time.time() < fin:
+                try:
+                    cid, _d = _trama(s)
+                    if not cid & ERR:
+                        vistas += 1
+                except socket.timeout:
+                    pass
+            s.close()
+        except Exception:
+            pass
+        info_interfaz()
+        b = estado.get("bus", "")
+        if vistas:
+            estado["ult_trama"] = time.time()
+            paso("Coche", True, "Conectado al coche: se ven %d mensajes por segundo" % int(vistas / 1.5))
+        elif b in ("ERROR-PASSIVE", "BUS-OFF", "ERROR-WARNING"):
+            paso("Coche", None, "Nadie contesta en el bus. Normal si no está conectado al coche. Si lo está, con el contacto puesto: "
+                 "revisa H (pin 6 del OBD) y L (pin 14), que no estén cruzados, la masa (pin 5), el 120R en OFF y el cristal.")
+        else:
+            paso("Coche", None, "Sin mensajes del coche (normal si no está conectado al OBD o el contacto está quitado)")
+        return _fin(pasos, None, auto)
+    finally:
+        estado["verificando"] = False
+        _verif_lock.release()
+
+
+def _fin(pasos, accion, auto):
+    ok = all(p["ok"] is not False for p in pasos)
+    v = {"ok": ok, "t": time.time(), "pasos": pasos, "accion": accion, "auto": auto,
+         "resumen": "El HAT CAN funciona" if ok else next(p["msg"] for p in pasos if p["ok"] is False)}
+    estado["verif"] = v
+    (LOG.info if ok else LOG.aviso)("CAN: comprobación %s · %s", "OK" if ok else "FALLA",
+                                     " | ".join("%s: %s" % (p["paso"], "ok" if p["ok"] else "—" if p["ok"] is None else "FALLA") for p in pasos), origen="can")
+    return v
+
+
+def activar():
+    """Escribe en config.txt lo que necesita el HAT (por si la instalación no lo hizo)."""
+    cfg, txt = _config()
+    if not cfg:
+        return {"ok": False, "error": "No encuentro config.txt"}
+    osc = _conf("CAN_CRISTAL", 12000000)
+    lineas = []
+    if not re.search(r"^\s*dtparam=spi=on", txt, re.M):
+        lineas.append("dtparam=spi=on")
+    if not re.search(r"^\s*dtoverlay=mcp2515-can0", txt, re.M):
+        lineas.append("dtoverlay=mcp2515-can0,oscillator=%d,interrupt=25,spimaxfrequency=2000000" % osc)
+    if lineas:
+        p = subprocess.run(["sudo", "-n", "tee", "-a", cfg], input="\n# Radar Play · HAT CAN\n" + "\n".join(lineas) + "\n",
+                           capture_output=True, text=True, timeout=15)
+        if p.returncode:
+            return {"ok": False, "error": "No pude escribir la configuración (¿modo protegido activado?): " + (p.stderr or "").strip()[:100]}
+        LOG.info("CAN: HAT activado en %s", cfg, origen="can")
+    estado["verif"] = {"ok": False, "t": time.time(), "accion": "reiniciar", "resumen": "Activado. Reinicia para terminar.",
+                       "pasos": [{"paso": "Configuración", "ok": True, "msg": "Activado. Reinicia la Raspberry para que se aplique."}]}
+    return {"ok": True, "msg": "Activado. Reinicia la Raspberry."}
+
+
 # ===================== API =====================
 def g_can(q):
     info_interfaz()
@@ -384,11 +569,31 @@ def p_can(d):
         return levantar(int(d.get("velocidad") or _vel()))
     if a == "cristal":
         return cambiar_cristal(d.get("hz"))
+    if a == "verificar":
+        threading.Thread(target=verificar, daemon=True, name="can-verificar").start()
+        return {"ok": True}
+    if a == "activar":
+        return activar()
     return {"ok": False, "error": "Acción desconocida"}
 
 
 def arrancar(sis=None, obd=None):
     info_interfaz()
+
+    def auto():                                    # al encender, una vez: ¿funciona el HAT?
+        time.sleep(10)
+        try:
+            _auto()
+        except Exception as e:
+            LOG.aviso("CAN: la comprobación automática falló: %s", e, origen="can")
+
+    def _auto():
+        if not _conf("CAN_HAT", 1):
+            return
+        _c, txt = _config()
+        if interfaz() or "mcp2515" in txt:
+            verificar(auto=True)
+    threading.Thread(target=auto, daemon=True, name="can-auto").start()
 
 
 GET = {"/api/can": g_can}
