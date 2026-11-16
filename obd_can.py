@@ -523,6 +523,11 @@ def _fin(pasos, accion, auto):
     estado["verif"] = v
     (LOG.info if ok else LOG.aviso)("CAN: comprobación %s · %s", "OK" if ok else "FALLA",
                                      " | ".join("%s: %s" % (p["paso"], "ok" if p["ok"] else "—" if p["ok"] is None else "FALLA") for p in pasos), origen="can")
+    if not ok:
+        LOG.aviso("CAN: %s", v["resumen"], origen="can")
+        k = _kernel_mcp()
+        if k:
+            LOG.aviso("CAN: el kernel dice: %s", " / ".join(k[-4:])[:400], origen="can")
     return v
 
 
